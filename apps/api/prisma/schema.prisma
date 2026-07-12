@@ -1,0 +1,551 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Tenancy ────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  name            String
+  companyName     String
+  featureFlags    Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  domains         TenantDomain[]
+  themes          TenantTheme[]
+  memberships     Membership[]
+  categories      ProductCategory[]
+  families        ProductFamily[]
+  models          ProductModel[]
+  variants        ProductVariant[]
+  steps           ConfiguratorStep[]
+  fields          FieldDefinition[]
+  optionGroups    OptionGroup[]
+  options         Option[]
+  materials       PublicMaterial[]
+  assets          Asset[]
+  bundles         AssetBundle[]
+  ruleSets        RuleSet[]
+  priceLists      PriceList[]
+  bomRecipes      BomRecipe[]
+  templates       DocumentTemplate[]
+  configurations  Configuration[]
+  leads           Lead[]
+  auditLogs       AuditLog[]
+  emailLogs       EmailLog[]
+  generatedDocs   GeneratedDocument[]
+  generatedModels GeneratedModel[]
+}
+
+model TenantDomain {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  domain    String  @unique
+  isPrimary Boolean @default(false)
+}
+
+model TenantTheme {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status        String    @default("draft") // draft | published | archived
+  version       Int
+  themeTokens   Json
+  layout        Json
+  texts         Json      @default("{}")
+  logoUrl       String?
+  logoDarkUrl   String?
+  faviconUrl    String?
+  footerText    String?
+  contact       Json?
+  legalLinks    Json      @default("[]")
+  languages     Json      @default("[\"pl\"]")
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([tenantId, version])
+  @@index([tenantId, status])
+}
+
+// ── Users & access ─────────────────────────────────────────────────────────
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  name            String
+  isPlatformOwner Boolean      @default(false)
+  disabled        Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  memberships     Membership[]
+  sessions        Session[]
+}
+
+model Membership {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role     String // tenant_admin | sales | dealer | production | viewer
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+}
+
+model Session {
+  id        String   @id // sha256 tokenu z cookie
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  csrfToken String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  userId    String?
+  userEmail String?
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+// ── Catalog ────────────────────────────────────────────────────────────────
+
+model ProductCategory {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key       String
+  systemKey String // hidden | solid | glass | sliding | mirrored | double
+  name      String
+  description String?
+  imageUrl  String?
+  order     Int     @default(0)
+  visible   Boolean @default(true)
+
+  families  ProductFamily[]
+  steps     ConfiguratorStep[]
+
+  @@unique([tenantId, key])
+}
+
+model ProductFamily {
+  id         String          @id @default(cuid())
+  tenantId   String
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  key        String
+  name       String
+  order      Int             @default(0)
+  visible    Boolean         @default(true)
+  models     ProductModel[]
+
+  @@unique([tenantId, key])
+}
+
+model ProductModel {
+  id           String        @id @default(cuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  familyId     String
+  family       ProductFamily @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  key          String
+  name         String
+  description  String?
+  thumbnailUrl String?
+  baseWidthMm  Int           @default(900)
+  baseHeightMm Int           @default(2100)
+  minWidthMm   Int           @default(600)
+  maxWidthMm   Int           @default(1100)
+  minHeightMm  Int           @default(1900)
+  maxHeightMm  Int           @default(2400)
+  order        Int           @default(0)
+  visible      Boolean       @default(true)
+  status       String        @default("draft") // draft | published | archived
+  bundleId     String?
+  bundle       AssetBundle?  @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  variants     ProductVariant[]
+  bomRecipes   BomRecipe[]
+
+  @@unique([tenantId, key])
+}
+
+model ProductVariant {
+  id       String       @id @default(cuid())
+  tenantId String
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  modelId  String
+  model    ProductModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  key      String
+  name     String
+  meta     Json         @default("{}")
+
+  @@unique([tenantId, modelId, key])
+}
+
+// ── Configurator schema (steps & fields as data) ───────────────────────────
+
+model ConfiguratorStep {
+  id          String           @id @default(cuid())
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  key         String
+  title       Json // per język: {"pl": "..."}
+  description Json?
+  order       Int              @default(0)
+  visible     Boolean          @default(true)
+  fields      FieldDefinition[]
+
+  @@unique([tenantId, key])
+}
+
+model FieldDefinition {
+  id            String           @id @default(cuid())
+  tenantId      String
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stepId        String
+  step          ConfiguratorStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  key           String
+  label         Json
+  type          String // select | radio_cards | color_select | toggle | number | dimensions | text | textarea
+  required      Boolean          @default(false)
+  defaultValue  Json?
+  tooltip       Json?
+  section       String?
+  unit          String?
+  min           Float?
+  max           Float?
+  stepSize      Float?
+  order         Int              @default(0)
+  visible       Boolean          @default(true)
+  optionGroupId String?
+  optionGroup   OptionGroup?     @relation(fields: [optionGroupId], references: [id], onDelete: SetNull)
+  /// mapowanie na 3D wyłącznie przez bezpieczne identyfikatory (np. material_slot:leaf_side_a)
+  mapsTo3d      String?
+
+  @@unique([tenantId, key])
+}
+
+model OptionGroup {
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key      String
+  name     String
+  options  Option[]
+  fields   FieldDefinition[]
+
+  @@unique([tenantId, key])
+}
+
+model Option {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  groupId     String
+  group       OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  value       String
+  label       Json
+  description Json?
+  imageUrl    String?
+  colorHex    String?
+  materialKey String?
+  order       Int         @default(0)
+  visible     Boolean     @default(true)
+  meta        Json        @default("{}")
+
+  @@unique([tenantId, groupId, value])
+}
+
+model PublicMaterial {
+  id           String  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key          String
+  name         String
+  kind         String // color | wood | glass | metal | mirror
+  baseColorHex String
+  roughness    Float   @default(0.7)
+  metalness    Float   @default(0)
+  opacity      Float   @default(1)
+  transmission Float   @default(0)
+  clearcoat    Float   @default(0)
+  order        Int     @default(0)
+  visible      Boolean @default(true)
+
+  @@unique([tenantId, key])
+}
+
+// ── Assets ─────────────────────────────────────────────────────────────────
+
+model Asset {
+  id          String         @id @default(cuid())
+  tenantId    String
+  tenant      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key         String
+  name        String
+  licenseInfo Json?
+  createdAt   DateTime       @default(now())
+  versions    AssetVersion[]
+
+  @@unique([tenantId, key])
+}
+
+model AssetVersion {
+  id                String    @id @default(cuid())
+  assetId           String
+  asset             Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  version           Int
+  status            String    @default("draft") // draft | valid | invalid | published | archived
+  fileName          String
+  byteSize          Int
+  checksum          String
+  storagePath       String
+  publicStoragePath String?
+  publicAssetId     String?   @unique
+  report            Json?
+  manifest          Json?
+  validationErrors  Json?
+  thumbnailUrl      String?
+  createdAt         DateTime  @default(now())
+  publishedAt       DateTime?
+  publishedById     String?
+  bundleItems       AssetBundleItem[]
+
+  @@unique([assetId, version])
+}
+
+model AssetBundle {
+  id          String            @id @default(cuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key         String
+  name        String
+  status      String            @default("draft")
+  version     Int               @default(1)
+  publishedAt DateTime?
+  items       AssetBundleItem[]
+  models      ProductModel[]
+
+  @@unique([tenantId, key])
+}
+
+model AssetBundleItem {
+  id             String       @id @default(cuid())
+  bundleId       String
+  bundle         AssetBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  slot           String // moduleSlot z kontraktu
+  assetVersionId String
+  assetVersion   AssetVersion @relation(fields: [assetVersionId], references: [id], onDelete: Restrict)
+  required       Boolean      @default(true)
+  order          Int          @default(0)
+  offsetMm       Json? // [x,y,z] przesunięcie modułu względem origin kompozycji
+
+  @@unique([bundleId, slot])
+}
+
+// ── Rules / prices / BOM / documents ───────────────────────────────────────
+
+model RuleSet {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  version       Int
+  status        String    @default("draft")
+  rules         Json // RuleDef[]
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([tenantId, version])
+  @@index([tenantId, status])
+}
+
+model PriceList {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  version       Int
+  status        String    @default("draft")
+  settings      Json // PriceListSettings
+  rules         Json // PriceRuleDef[]
+  validFrom     DateTime?
+  validTo       DateTime?
+  publishedAt   DateTime?
+  publishedById String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([tenantId, version])
+  @@index([tenantId, status])
+}
+
+model BomRecipe {
+  id            String       @id @default(cuid())
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  modelId       String
+  model         ProductModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  name          String
+  version       Int
+  status        String       @default("draft")
+  items         Json // BomItemDef[]
+  publishedAt   DateTime?
+  publishedById String?
+
+  @@unique([tenantId, modelId, version])
+}
+
+model DocumentTemplate {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind          String // customer_specification | sales_quote | production_bom | measurement_sheet
+  name          String
+  version       Int
+  status        String    @default("draft")
+  config        Json // sekcje, kolory, stopka, widoczność pól
+  publishedAt   DateTime?
+  publishedById String?
+
+  @@unique([tenantId, kind, version])
+}
+
+// ── Configurations / leads / outputs ───────────────────────────────────────
+
+model Configuration {
+  id              String    @id @default(cuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shareId         String    @unique
+  categoryKey     String
+  modelKey        String?
+  selections      Json
+  revision        Int       @default(0)
+  status          String    @default("draft") // draft | saved | submitted
+  name            String?
+  measurements    Json?
+  customerNote    String?
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  snapshots       ConfigurationSnapshot[]
+  leads           Lead[]
+
+  @@index([tenantId, createdAt])
+}
+
+model ConfigurationSnapshot {
+  id              String        @id @default(cuid())
+  configurationId String
+  configuration   Configuration @relation(fields: [configurationId], references: [id], onDelete: Cascade)
+  revision        Int
+  selections      Json
+  /// pełny wynik evaluate (publiczny) w chwili zapisu
+  evaluateResult  Json
+  renderSpec      Json?
+  /// wewnętrzny rozkład ceny (wszystkie pozycje, także niepubliczne)
+  priceBreakdown  Json?
+  versions        Json
+  checksum        String
+  createdAt       DateTime      @default(now())
+  documents       GeneratedDocument[]
+  modelsOut       GeneratedModel[]
+
+  @@unique([configurationId, revision])
+}
+
+model Lead {
+  id              String         @id @default(cuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  configurationId String?
+  configuration   Configuration? @relation(fields: [configurationId], references: [id], onDelete: SetNull)
+  customer        Json // imię, kontakt, kod pocztowy, zgody
+  message         String?
+  status          String         @default("new") // new | contacted | closed
+  assignedToId    String?
+  createdAt       DateTime       @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+model GeneratedDocument {
+  id              String                @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  snapshotId      String
+  snapshot        ConfigurationSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  kind            String
+  status          String                @default("queued") // queued | processing | done | failed
+  storagePath     String?
+  checksum        String?
+  templateVersion Int?
+  error           String?
+  requestedById   String?
+  idempotencyKey  String?               @unique
+  createdAt       DateTime              @default(now())
+  finishedAt      DateTime?
+
+  @@index([tenantId, createdAt])
+}
+
+model GeneratedModel {
+  id             String                @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  snapshotId     String
+  snapshot       ConfigurationSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  kind           String // glb | usdz
+  status         String                @default("queued")
+  storagePath    String?
+  publicToken    String?               @unique
+  checksum       String?
+  byteSize       Int?
+  error          String?
+  idempotencyKey String?               @unique
+  createdAt      DateTime              @default(now())
+  finishedAt     DateTime?
+
+  @@index([tenantId, createdAt])
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  to        String
+  subject   String
+  body      String
+  status    String   @default("logged") // logged | sent | failed
+  createdAt DateTime @default(now())
+}

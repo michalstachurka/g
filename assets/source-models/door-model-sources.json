@@ -1,0 +1,72 @@
+[
+  {
+    "catalogModel": "basic-flat",
+    "file": "basic-flat.glb",
+    "sourceTitle": "Door1",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door1/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door1_glb-1.glb"
+  },
+  {
+    "catalogModel": "basic-frame",
+    "file": "basic-frame.glb",
+    "sourceTitle": "Door38",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door38/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door38_glb.glb"
+  },
+  {
+    "catalogModel": "basic-glass",
+    "file": "basic-glass.glb",
+    "sourceTitle": "Door7",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door7/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door7_glb.glb"
+  },
+  {
+    "catalogModel": "basic-hidden",
+    "file": "basic-hidden.glb",
+    "sourceTitle": "Door33",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door33/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door33_glb.glb"
+  },
+  {
+    "catalogModel": "basic-double",
+    "file": "basic-double.glb",
+    "sourceTitle": "Door18",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door18/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door18_glb.glb"
+  },
+  {
+    "catalogModel": "basic-apartment-solid",
+    "file": "basic-apartment-solid.glb",
+    "sourceTitle": "Door3",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door3/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door3_glb.glb"
+  },
+  {
+    "catalogModel": "basic-apartment-secure",
+    "file": "basic-apartment-secure.glb",
+    "sourceTitle": "Door46",
+    "source": "IArchway",
+    "license": "Free for personal and commercial use; modification allowed; credit attribution not required; redistribution/resale of lightly altered source data prohibited.",
+    "termsUrl": "https://iarchway.com/en/download_policy/",
+    "sourceUrl": "https://iarchway.com/en/door46/",
+    "assetUrl": "https://iarchway.com/wp-content/uploads/2025/07/Door46_glb.glb"
+  }
+]

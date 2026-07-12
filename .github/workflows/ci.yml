@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: doorconf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/doorconf
+      REDIS_URL: redis://127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Kontrola licencji zależności
+        run: pnpm run licenses:check
+      - name: Klient Prisma + migracje
+        run: |
+          pnpm --filter @door/api exec prisma generate
+          pnpm --filter @door/api exec prisma migrate deploy
+      - name: Build kontraktów
+        run: pnpm --filter @door/contracts build
+      - name: Przygotowanie modułów GLB
+        run: pnpm run seed:assets
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Testy jednostkowe i integracyjne
+        run: pnpm test

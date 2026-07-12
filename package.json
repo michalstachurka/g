@@ -1,0 +1,43 @@
+{
+  "name": "door-configurator-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @door/api exec prisma migrate deploy",
+    "db:push": "pnpm --filter @door/api exec prisma db push",
+    "seed": "pnpm --filter @door/api run seed",
+    "seed:assets": "node scripts/prepare-seed-assets.mjs",
+    "licenses:check": "node scripts/license-check.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@gltf-transform/core": "^4.4.1",
+    "@gltf-transform/functions": "^4.4.1",
+    "eslint": "^9.39.5",
+    "turbo": "^2.3.3",
+    "typescript-eslint": "^8.63.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "prisma",
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "@tailwindcss/oxide",
+      "sharp",
+      "unrs-resolver",
+      "msgpackr-extract",
+      "@nestjs/core"
+    ]
+  }
+}
