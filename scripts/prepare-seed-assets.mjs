@@ -227,6 +227,10 @@ const SPLITS = [
       {
         name: 'wall',
         semanticRole: 'frame',
+        // Panel ściany źródłowej ma 1.8 m i mieści skrzydło tylko z jednej
+        // strony (reszta to pusta ściana - wyglądało jak drugie skrzydło).
+        // Centrujemy panel na skrzydle i zawężamy do skrzydła + ościeże.
+        fitToLeafRevealMm: 150,
         keep: [{ index: 4, role: 'wall_panel' }],
         anchors: {},
         materialBindings: [{ slotKey: 'wall_panel', appliesToRoles: ['wall_panel'] }],
@@ -262,6 +266,7 @@ const SPLITS = [
       {
         name: 'wall',
         semanticRole: 'frame',
+        fitToLeafRevealMm: 150,
         keep: [
           { index: 5, role: 'wall_panel' },
           { index: 4, role: 'toplight' },
@@ -275,6 +280,46 @@ const SPLITS = [
     ],
   },
 ];
+
+/** Zakres X (świat, z przesunięciem) skrzydła danego modelu - do centrowania ściany. */
+function leafXRange(split, bboxes) {
+  const leafRoles = new Set(['door_leaf', 'leaf_side_a', 'leaf_side_b', 'active_leaf']);
+  const leafMod = split.modules.find((m) => ['door_leaf', 'active_leaf'].includes(m.semanticRole));
+  let min = Infinity;
+  let max = -Infinity;
+  for (const k of leafMod.keep) {
+    if (!leafRoles.has(k.role)) continue;
+    const bb = bboxes[k.index];
+    min = Math.min(min, bb.min[0]);
+    max = Math.max(max, bb.max[0]);
+  }
+  return [min, max];
+}
+
+/**
+ * Przeskalowanie i wyśrodkowanie węzła w X tak, aby jego bbox świata pokrył
+ * dokładnie [center - width/2, center + width/2]. Skala liczona wokół środka
+ * geometrii węzła - to nadal tylko transform istniejącego węzła (ADR-0004),
+ * bez tworzenia nowej geometrii.
+ */
+function fitNodeX(node, targetCenter, targetWidth) {
+  const mesh = node.getMesh();
+  if (!mesh) return;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const prim of mesh.listPrimitives()) {
+    const pos = prim.getAttribute('POSITION');
+    if (!pos) continue;
+    lo = Math.min(lo, pos.getMin([])[0]);
+    hi = Math.max(hi, pos.getMax([])[0]);
+  }
+  const localCenter = (lo + hi) / 2;
+  const scaleX = targetWidth / (hi - lo);
+  const s = node.getScale();
+  node.setScale([scaleX, s[1], s[2]]);
+  const t = node.getTranslation();
+  node.setTranslation([targetCenter - localCenter * scaleX, t[1], t[2]]);
+}
 
 function nodeWorldBbox(node, shiftX) {
   const mesh = node.getMesh();
@@ -310,14 +355,30 @@ for (const split of SPLITS) {
     const bboxes = children.map((n) => nodeWorldBbox(n, split.shiftX));
 
     const keepIndices = new Set(moduleDef.keep.map((k) => k.index));
+    const keptNodes = [];
     children.forEach((node, index) => {
       if (!keepIndices.has(index)) {
         node.dispose();
-      } else if (split.shiftX !== 0) {
+        return;
+      }
+      if (split.shiftX !== 0) {
         const t = node.getTranslation();
         node.setTranslation([t[0] + split.shiftX, t[1], t[2]]);
       }
+      keptNodes.push(node);
     });
+
+    // Dopasowanie panelu ściany do skrzydła (drzwi ukryte/naświetle): panel
+    // źródłowy jest szerszy niż skrzydło i przez to wyglądał jak drugie skrzydło.
+    if (moduleDef.fitToLeafRevealMm != null) {
+      const [lmin, lmax] = leafXRange(split, bboxes);
+      const targetCenter = (lmin + lmax) / 2;
+      const targetWidth = lmax - lmin + 2 * (moduleDef.fitToLeafRevealMm / 1000);
+      for (const node of keptNodes) fitNodeX(node, targetCenter, targetWidth);
+      console.log(
+        `  fit ${split.modelKey}.${moduleDef.name}: skrzydło ${(lmax - lmin).toFixed(3)}m @${targetCenter.toFixed(3)} -> ściana ${targetWidth.toFixed(3)}m`,
+      );
+    }
     await document.transform(prune());
 
     // nodePath = indeks w NOWEJ scenie; kolejność zachowana względem `keep`.
