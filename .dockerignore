@@ -1,0 +1,10 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+var
+coverage
+.git
+*.log
+assets/seed-modules
+apps/api/prisma/generated

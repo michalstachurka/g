@@ -57,10 +57,12 @@ export class AuthController {
         userAgent: req.headers['user-agent']?.slice(0, 300) ?? null,
       },
     });
+    // W chmurze admin i API bywają na różnych subdomenach (cross-site) -
+    // wtedy wymagane SameSite=None; Secure, aby cookie sesji było wysyłane.
     const secure = process.env.NODE_ENV === 'production';
     res.cookie('sid', token, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: secure ? 'none' : 'lax',
       secure,
       maxAge: SESSION_TTL_MS,
       path: '/',

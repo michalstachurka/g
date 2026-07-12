@@ -4,7 +4,15 @@
  * Klient API panelu: sesja cookie + nagłówki x-tenant i x-csrf-token.
  * Kontekst tenanta i token CSRF trzymane w localStorage po zalogowaniu.
  */
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+function resolveApiUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  if (raw == null) return 'http://localhost:4000';
+  if (raw === '') return '';
+  if (/^https?:\/\//.test(raw)) return raw;
+  return `https://${raw}`;
+}
+
+export const API_URL = resolveApiUrl();
 
 export interface AdminSession {
   user: { id: string; email: string; name: string; isPlatformOwner: boolean };

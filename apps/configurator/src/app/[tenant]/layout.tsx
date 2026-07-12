@@ -5,9 +5,13 @@ import { API_URL } from '@/lib/api';
 import { themeVars } from '@/lib/theme';
 import { Providers } from '@/components/providers';
 
+// Render serwerowy nie może użyć adresu względnego (same-origin) - potrzebuje
+// bezwzględnego adresu API. W jednym kontenerze to adres wewnętrzny.
+const serverApiBase = process.env.API_INTERNAL_URL || API_URL || 'http://localhost:4000';
+
 async function fetchBranding(tenant: string): Promise<PublicBranding | null> {
   try {
-    const response = await fetch(`${API_URL}/public/${tenant}/branding`, { next: { revalidate: 30 } });
+    const response = await fetch(`${serverApiBase}/public/${tenant}/branding`, { next: { revalidate: 30 } });
     if (!response.ok) return null;
     return (await response.json()) as PublicBranding;
   } catch {

@@ -9,7 +9,19 @@ import type {
   SelectionValue,
 } from '@door/contracts';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+/**
+ * Adres API. Puste = ten sam origin. Host bez schematu (np. z fromService na
+ * Render) uzupełniamy o https://. Domyślnie lokalny backend.
+ */
+function resolveApiUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  if (raw == null) return 'http://localhost:4000';
+  if (raw === '') return '';
+  if (/^https?:\/\//.test(raw)) return raw;
+  return `https://${raw}`;
+}
+
+export const API_URL = resolveApiUrl();
 
 async function get<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, init);

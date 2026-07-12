@@ -6,12 +6,33 @@ import cookieParser from 'cookie-parser';
 import { ZodError } from 'zod';
 import { AppModule } from './app.module';
 
+/** Uzupełnia adresy z hostingu (np. Render fromService podaje host bez schematu). */
+function normalizeUrlEnv(key: string) {
+  const value = process.env[key];
+  if (value && !/^https?:\/\//.test(value)) process.env[key] = `https://${value}`;
+}
+
 async function bootstrap() {
+  normalizeUrlEnv('CONFIGURATOR_URL');
+  normalizeUrlEnv('ADMIN_URL');
+  normalizeUrlEnv('API_PUBLIC_URL');
+
   const app = await NestFactory.create(AppModule, { logger: ['log', 'warn', 'error'] });
 
   app.use(cookieParser());
+  const allowList = (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3001')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3001').split(','),
+    // Dozwolone: skonfigurowane originy oraz domeny *.onrender.com (wdrożenie demo).
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      const ok =
+        !origin ||
+        allowList.includes(origin) ||
+        /\.(onrender\.com|railway\.app|up\.railway\.app)$/.test(new URL(origin).hostname);
+      callback(null, ok);
+    },
     credentials: true,
   });
   // Walidacja wejścia odbywa się schematami Zod w kontrolerach.
@@ -63,9 +84,10 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config));
 
-  const port = Number(process.env.API_PORT ?? 4000);
-  await app.listen(port);
-  console.log(`API działa na http://localhost:${port} (OpenAPI: /docs)`);
+  // Render/hosting ustawia PORT; lokalnie używamy API_PORT.
+  const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
+  await app.listen(port, '0.0.0.0');
+  console.log(`API działa na porcie ${port} (OpenAPI: /docs)`);
 }
 
 bootstrap();
