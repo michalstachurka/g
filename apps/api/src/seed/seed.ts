@@ -215,6 +215,8 @@ async function main() {
     'porta-vista-naswietle': sources.find((s) => s.catalogModel === 'basic-frame')!,
   };
 
+  // Moduły GLB generuje scripts/prepare-seed-assets.mjs w czasie budowania obrazu
+  // (panel ściany drzwi ukrytych jest tam wyśrodkowany na skrzydle i zawężony).
   const moduleFiles = readdirSync(MODULES_DIR).filter((f) => f.endsWith('.glb'));
   const assetVersionByKey: Record<string, { id: string; publicAssetId: string }> = {};
   for (const file of moduleFiles) {
