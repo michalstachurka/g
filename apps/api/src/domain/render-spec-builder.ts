@@ -114,13 +114,25 @@ export function buildRenderSpec(input: BuildRenderSpecInput): BuildRenderSpecOut
 
   let animationPivot: Vec3Mm | null = null;
 
+  // DIN: decyzję o odbiciu podejmujemy dla CAŁEJ kompozycji na podstawie
+  // głównego skrzydła. Ościeżnica, ściana, próg itp. muszą odbić się razem ze
+  // skrzydłem, inaczej rozjeżdżają się (np. drzwi ukryte w panelu ściennym).
+  const primaryLeafSlot = isDouble ? 'active_leaf' : 'door_leaf';
+  const primaryLeaf = input.modules.find((m) => m.slot === primaryLeafSlot) ?? input.modules[0];
+  const compositionMirrored =
+    !!primaryLeaf?.manifest.baseHingeSide && primaryLeaf.manifest.baseHingeSide !== input.din;
+
   for (const mod of input.modules) {
     const manifest = mod.manifest;
     const scale = moduleScale(manifest, input.widthMm, input.heightMm);
+    const isLeaf = mod.slot === 'door_leaf' || mod.slot === 'active_leaf' || mod.slot === 'passive_leaf';
 
-    // DIN: odbicie modułu, gdy autorska strona zawiasów nie zgadza się z wyborem.
+    // Skrzydło: własna decyzja wg baseHingeSide. Pozostałe moduły (ościeżnica,
+    // ściana, próg, naświetla) dziedziczą odbicie kompozycji.
     let mirrored = false;
-    if (manifest.baseHingeSide && manifest.baseHingeSide !== input.din) {
+    const wantsMirror =
+      isLeaf && manifest.baseHingeSide ? manifest.baseHingeSide !== input.din : compositionMirrored;
+    if (wantsMirror) {
       if (manifest.mirrorPolicy === 'allow') {
         mirrored = true;
       } else {

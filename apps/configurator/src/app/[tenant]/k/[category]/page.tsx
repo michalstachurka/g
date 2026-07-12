@@ -101,7 +101,7 @@ export default function ConfiguratorPage({
   const globalErrors = (evaluate?.errors ?? []).filter((e) => !e.fieldKey);
 
   const viewer = (
-    <div className={cn('relative bg-[#eceae5]', fullscreen ? 'fixed inset-0 z-40' : 'h-[var(--viewer-h-mobile)] lg:h-auto lg:flex-1')}>
+    <div className={cn('relative bg-[#eceae5]', fullscreen ? 'fixed inset-0 z-40' : 'h-[var(--viewer-h-mobile)] shrink-0 lg:h-auto lg:flex-1')}>
       {renderSpec ? (
         <DoorViewer tenant={tenant} renderSpec={renderSpec} open={store.doorOpen} viewSide={store.viewSide} />
       ) : (
@@ -142,7 +142,7 @@ export default function ConfiguratorPage({
 
   const panel = (
     <div
-      className="flex w-full flex-col border-[var(--c-border)] bg-[var(--c-surface)] lg:h-[calc(100vh-3.5rem)] lg:w-[var(--panel-width)] lg:overflow-y-auto"
+      className="flex w-full min-h-0 flex-1 flex-col overflow-y-auto border-[var(--c-border)] bg-[var(--c-surface)] lg:h-[calc(100vh-3.5rem)] lg:w-[var(--panel-width)] lg:flex-none"
       style={{ borderLeftWidth: panelRight ? 1 : 0, borderRightWidth: panelRight ? 0 : 1 }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--c-border)] px-4 py-3">
@@ -295,7 +295,12 @@ export default function ConfiguratorPage({
   );
 
   return (
-    <div className={cn('flex flex-col lg:flex-row', panelRight ? '' : 'lg:flex-row-reverse')}>
+    <div
+      className={cn(
+        'flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden lg:h-[calc(100vh-3.5rem)] lg:flex-row',
+        panelRight ? '' : 'lg:flex-row-reverse',
+      )}
+    >
       {viewer}
       {panel}
       <SaveShareDialog
