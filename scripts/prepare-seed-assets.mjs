@@ -201,11 +201,16 @@ const SPLITS = [
   {
     source: 'basic-hidden.glb',
     modelKey: 'porta-invisible-ukryte',
-    shiftX: 0.9,
-    baseWidthMm: 1800,
+    // Viewer, kamera i ściana demo zakładają kompozycję w przedziale
+    // 0..baseWidth. Skrzydło (0.87 m) centrujemy na 0.45 m, a panel ściany
+    // przycinamy do otworu 0..0.9 m + reveal. Płaszczyzna lustra DIN = 450 mm,
+    // więc kompozycja odbija się sama na siebie (stabilny widok przy zmianie DIN).
+    shiftX: 0,
+    centerLeafAtM: 0.45,
+    baseWidthMm: 900,
     baseHeightMm: 2100,
     scalePolicy: 'variant_only',
-    range: { minWidthMm: 1800, maxWidthMm: 1800, minHeightMm: 2100, maxHeightMm: 2100 },
+    range: { minWidthMm: 850, maxWidthMm: 1000, minHeightMm: 2050, maxHeightMm: 2200 },
     modules: [
       {
         name: 'leaf',
@@ -227,10 +232,11 @@ const SPLITS = [
       {
         name: 'wall',
         semanticRole: 'frame',
-        // Panel ściany źródłowej ma 1.8 m i mieści skrzydło tylko z jednej
-        // strony (reszta to pusta ściana - wyglądało jak drugie skrzydło).
-        // Centrujemy panel na skrzydle i zawężamy do skrzydła + ościeże.
-        fitToLeafRevealMm: 150,
+        // Panel ściany źródłowej ma 1.8 m, a otwór drzwiowy jest przy jednej
+        // krawędzi - odsłonięta reszta ściany wyglądała jak drugie skrzydło.
+        // Przycinamy marginesy per-wierzchołek z zachowaniem otworu 1:1 na
+        // skrzydle (skalowanie węzła zniekształciłoby otwór).
+        trimToOpeningRevealMm: 150,
         keep: [{ index: 4, role: 'wall_panel' }],
         anchors: {},
         materialBindings: [{ slotKey: 'wall_panel', appliesToRoles: ['wall_panel'] }],
@@ -240,11 +246,12 @@ const SPLITS = [
   {
     source: 'basic-frame.glb',
     modelKey: 'porta-vista-naswietle',
-    shiftX: 0.9,
-    baseWidthMm: 1800,
+    shiftX: 0,
+    centerLeafAtM: 0.45,
+    baseWidthMm: 900,
     baseHeightMm: 2100,
     scalePolicy: 'variant_only',
-    range: { minWidthMm: 1800, maxWidthMm: 1800, minHeightMm: 2100, maxHeightMm: 2100 },
+    range: { minWidthMm: 850, maxWidthMm: 1000, minHeightMm: 2050, maxHeightMm: 2200 },
     modules: [
       {
         name: 'leaf',
@@ -266,7 +273,7 @@ const SPLITS = [
       {
         name: 'wall',
         semanticRole: 'frame',
-        fitToLeafRevealMm: 150,
+        trimToOpeningRevealMm: 150,
         keep: [
           { index: 5, role: 'wall_panel' },
           { index: 4, role: 'toplight' },
@@ -297,14 +304,16 @@ function leafXRange(split, bboxes) {
 }
 
 /**
- * Przeskalowanie i wyśrodkowanie węzła w X tak, aby jego bbox świata pokrył
- * dokładnie [center - width/2, center + width/2]. Skala liczona wokół środka
- * geometrii węzła - to nadal tylko transform istniejącego węzła (ADR-0004),
- * bez tworzenia nowej geometrii.
+ * Przycięcie marginesów panelu ściany w X BEZ ruszania otworu drzwiowego:
+ * wierzchołki na lewo od otworu są liniowo ściągane do [targetLo, holeLo],
+ * na prawo - do [holeHi, targetHi]; wierzchołki otworu zostają 1:1.
+ * (Skalowanie całego węzła przesuwałoby i zwężało otwór razem z panelem -
+ * skrzydło przestawało pasować do otworu.)
  */
-function fitNodeX(node, targetCenter, targetWidth) {
+function trimNodeMarginsX(node, holeLoL, holeHiL, targetLoL, targetHiL, doneAccessors) {
   const mesh = node.getMesh();
   if (!mesh) return;
+  const EPS = 1e-6;
   let lo = Infinity;
   let hi = -Infinity;
   for (const prim of mesh.listPrimitives()) {
@@ -313,12 +322,23 @@ function fitNodeX(node, targetCenter, targetWidth) {
     lo = Math.min(lo, pos.getMin([])[0]);
     hi = Math.max(hi, pos.getMax([])[0]);
   }
-  const localCenter = (lo + hi) / 2;
-  const scaleX = targetWidth / (hi - lo);
-  const s = node.getScale();
-  node.setScale([scaleX, s[1], s[2]]);
-  const t = node.getTranslation();
-  node.setTranslation([targetCenter - localCenter * scaleX, t[1], t[2]]);
+  const leftFactor = holeLoL - lo > EPS ? (holeLoL - targetLoL) / (holeLoL - lo) : 0;
+  const rightFactor = hi - holeHiL > EPS ? (targetHiL - holeHiL) / (hi - holeHiL) : 0;
+  for (const prim of mesh.listPrimitives()) {
+    const pos = prim.getAttribute('POSITION');
+    if (!pos || doneAccessors.has(pos)) continue;
+    doneAccessors.add(pos);
+    const arr = pos.getArray().slice();
+    for (let i = 0; i < arr.length; i += 3) {
+      const x = arr[i];
+      if (leftFactor > 0 && x < holeLoL - EPS) {
+        arr[i] = holeLoL - (holeLoL - x) * leftFactor;
+      } else if (rightFactor > 0 && x > holeHiL + EPS) {
+        arr[i] = holeHiL + (x - holeHiL) * rightFactor;
+      }
+    }
+    pos.setArray(arr);
+  }
 }
 
 function nodeWorldBbox(node, shiftX) {
@@ -346,13 +366,25 @@ const manifestIndex = [];
 
 for (const split of SPLITS) {
   const srcPath = join(SRC, split.source);
+
+  // Przesunięcie: stałe (shiftX) albo automatyczne centrowanie skrzydła
+  // na baseWidth/2, aby kompozycja zajmowała przedział 0..baseWidth.
+  let shiftX = split.shiftX;
+  if (split.centerLeafAtM != null) {
+    const probe = await io.read(srcPath);
+    const probeBoxes = probe.getRoot().getDefaultScene().listChildren().map((n) => nodeWorldBbox(n, 0));
+    const [lmin, lmax] = leafXRange(split, probeBoxes);
+    shiftX = split.centerLeafAtM - (lmin + lmax) / 2;
+    console.log(`  ${split.modelKey}: skrzydło [${lmin.toFixed(3)}, ${lmax.toFixed(3)}] -> shiftX ${shiftX.toFixed(3)}`);
+  }
+
   for (const moduleDef of split.modules) {
     const document = await io.read(srcPath);
     const scene = document.getRoot().getDefaultScene();
     const children = scene.listChildren();
 
     // bboxy WSZYSTKICH węzłów źródłowych (do anchorów), z przesunięciem.
-    const bboxes = children.map((n) => nodeWorldBbox(n, split.shiftX));
+    const bboxes = children.map((n) => nodeWorldBbox(n, shiftX));
 
     const keepIndices = new Set(moduleDef.keep.map((k) => k.index));
     const keptNodes = [];
@@ -361,22 +393,27 @@ for (const split of SPLITS) {
         node.dispose();
         return;
       }
-      if (split.shiftX !== 0) {
+      if (shiftX !== 0) {
         const t = node.getTranslation();
-        node.setTranslation([t[0] + split.shiftX, t[1], t[2]]);
+        node.setTranslation([t[0] + shiftX, t[1], t[2]]);
       }
       keptNodes.push(node);
     });
 
-    // Dopasowanie panelu ściany do skrzydła (drzwi ukryte/naświetle): panel
-    // źródłowy jest szerszy niż skrzydło i przez to wyglądał jak drugie skrzydło.
-    if (moduleDef.fitToLeafRevealMm != null) {
-      const [lmin, lmax] = leafXRange(split, bboxes);
-      const targetCenter = (lmin + lmax) / 2;
-      const targetWidth = lmax - lmin + 2 * (moduleDef.fitToLeafRevealMm / 1000);
-      for (const node of keptNodes) fitNodeX(node, targetCenter, targetWidth);
+    // Przycięcie panelu ściany do otworu 0..baseWidth + reveal (drzwi
+    // ukryte/naświetle) - otwór drzwiowy zostaje 1:1 pod skrzydłem.
+    if (moduleDef.trimToOpeningRevealMm != null) {
+      const [holeLo, holeHi] = leafXRange(split, bboxes);
+      const reveal = moduleDef.trimToOpeningRevealMm / 1000;
+      const targetLo = 0 - reveal;
+      const targetHi = split.baseWidthMm / 1000 + reveal;
+      const doneAccessors = new Set();
+      for (const node of keptNodes) {
+        const t = node.getTranslation();
+        trimNodeMarginsX(node, holeLo - t[0], holeHi - t[0], targetLo - t[0], targetHi - t[0], doneAccessors);
+      }
       console.log(
-        `  fit ${split.modelKey}.${moduleDef.name}: skrzydło ${(lmax - lmin).toFixed(3)}m @${targetCenter.toFixed(3)} -> ściana ${targetWidth.toFixed(3)}m`,
+        `  trim ${split.modelKey}.${moduleDef.name}: otwór [${holeLo.toFixed(3)}, ${holeHi.toFixed(3)}] -> panel [${targetLo.toFixed(3)}, ${targetHi.toFixed(3)}]`,
       );
     }
     await document.transform(prune());

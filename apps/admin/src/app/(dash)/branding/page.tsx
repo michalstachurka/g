@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Spinner } from '@door/ui';
-import { adminApi, API_URL } from '@/lib/admin-api';
+import { adminApi, API_URL, getTenantSlug } from '@/lib/admin-api';
 import { PageHeader, TextInput, SelectInput } from '@/components/shared';
 
 const COLOR_FIELDS: [string, string][] = [
@@ -32,7 +32,7 @@ const TEXT_KEYS: [string, string][] = [
 
 export default function BrandingPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ['branding'], queryFn: adminApi.branding });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ['branding'], queryFn: adminApi.branding });
   const [theme, setTheme] = useState<Record<string, unknown>>({});
   const [layout, setLayout] = useState<Record<string, unknown>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -65,7 +65,21 @@ export default function BrandingPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['branding'] }),
   });
 
-  if (isLoading || !data) return <Spinner label="Wczytywanie brandingu…" />;
+  if (isLoading) return <Spinner label="Wczytywanie brandingu…" />;
+  // Jawny stan błędu zamiast wiecznego spinnera - inaczej "nie działa"
+  // bez żadnej informacji dlaczego (sesja, rola, sieć).
+  if (error || !data) {
+    return (
+      <div className="max-w-md space-y-3">
+        <p className="text-sm text-[var(--c-error)]">
+          Nie udało się wczytać brandingu: {(error as Error | null)?.message ?? 'brak danych'}.
+        </p>
+        <Button variant="secondary" onClick={() => refetch()}>Spróbuj ponownie</Button>
+      </div>
+    );
+  }
+
+  const actionError = (save.error ?? publish.error) as Error | null;
 
   return (
     <div className="max-w-4xl">
@@ -78,11 +92,26 @@ export default function BrandingPage() {
               {save.isPending ? 'Zapisywanie…' : savedAt ? 'Zapisano ✓' : 'Zapisz szkic'}
             </Button>
             <Button onClick={() => publish.mutate()} disabled={publish.isPending}>
-              Opublikuj
+              {publish.isPending ? 'Publikowanie…' : publish.isSuccess ? 'Opublikowano ✓' : 'Opublikuj'}
             </Button>
           </>
         }
       />
+
+      {actionError ? (
+        <p className="mb-3 rounded-[var(--radius)] border border-[var(--c-error)] bg-[color-mix(in_srgb,var(--c-error)_6%,white)] px-3 py-2 text-sm text-[var(--c-error)]">
+          Operacja nie powiodła się: {actionError.message}. Odśwież stronę i zaloguj się ponownie, jeśli problem wraca.
+        </p>
+      ) : null}
+      {publish.isSuccess ? (
+        <p className="mb-3 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 text-sm">
+          Zmiany są publiczne. Konfigurator odświeży motyw do 30 sekund -{' '}
+          <a href={`/${getTenantSlug() ?? 'demo'}`} target="_blank" rel="noreferrer" className="underline">
+            otwórz konfigurator
+          </a>{' '}
+          (na telefonie odśwież stronę).
+        </p>
+      ) : null}
 
       <div className="space-y-4">
         <Card className="p-4">

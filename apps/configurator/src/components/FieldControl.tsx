@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { AvailableOption, PublicField, SelectionValue } from '@door/contracts';
 import { FieldLabel, cn } from '@door/ui';
 
@@ -30,6 +31,32 @@ export function FieldControl({
   })) ?? [];
   const colorByValue = new Map(field.options?.map((o) => [o.value, o.colorHex] as const) ?? []);
 
+  // Pola liczbowe: stan roboczy pozwala swobodnie kasować/wpisywać wartości
+  // (bez natychmiastowego resetu do domyślnej); zatwierdzenie po walidacji.
+  const committed =
+    typeof value === 'number' ? value : Number(value ?? field.defaultValue ?? field.min ?? 0);
+  const [draft, setDraft] = useState<string | null>(null);
+  const sliderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    setDraft(null);
+  }, [value]);
+  useEffect(() => () => {
+    if (sliderTimer.current) clearTimeout(sliderTimer.current);
+  }, []);
+
+  const step = field.step ?? (field.unit === 'mm' ? 10 : 1);
+  const clamp = (n: number) => {
+    let v = n;
+    if (field.min != null) v = Math.max(field.min, v);
+    if (field.max != null) v = Math.min(field.max, v);
+    return Math.round(v);
+  };
+  const commitNumber = (n: number) => {
+    const v = clamp(n);
+    if (v !== committed) onChange(v);
+    setDraft(null);
+  };
+
   return (
     <div>
       <FieldLabel label={field.label} required={field.required} tooltip={field.tooltip} />
@@ -41,25 +68,92 @@ export function FieldControl({
   function renderControl() {
     switch (field.type) {
       case 'number':
-      case 'dimensions':
+      case 'dimensions': {
+        const shown = draft ?? String(committed);
+        const stepBtn =
+          'grid h-10 w-10 shrink-0 place-items-center rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] text-lg leading-none text-[var(--c-text)] transition hover:border-[var(--c-primary)] disabled:cursor-not-allowed disabled:opacity-35';
         return (
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              className="w-32 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 text-sm outline-none focus:border-[var(--c-primary)]"
-              value={typeof value === 'number' ? value : Number(value ?? field.defaultValue ?? 0)}
-              min={field.min ?? undefined}
-              max={field.max ?? undefined}
-              step={field.step ?? 1}
-              onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
-              aria-label={field.label}
-            />
-            {field.unit ? <span className="text-sm text-[var(--c-text-muted)]">{field.unit}</span> : null}
+          <div className="max-w-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={stepBtn}
+                aria-label={`Zmniejsz: ${field.label}`}
+                disabled={field.min != null && committed <= field.min}
+                onClick={() => commitNumber(committed - step)}
+              >
+                −
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                className="h-10 w-full min-w-0 rounded-[var(--radius)] border border-[var(--c-border)] bg-[var(--c-surface)] px-3 text-center text-sm outline-none focus:border-[var(--c-primary)]"
+                value={shown}
+                min={field.min ?? undefined}
+                max={field.max ?? undefined}
+                step={step}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setDraft(raw);
+                  const n = Number(raw);
+                  // Zatwierdzaj w trakcie pisania tylko wartości w zakresie;
+                  // stany pośrednie (np. puste pole, "9" przy min 600) czekają.
+                  if (
+                    raw !== '' &&
+                    Number.isFinite(n) &&
+                    (field.min == null || n >= field.min) &&
+                    (field.max == null || n <= field.max)
+                  ) {
+                    if (n !== committed) onChange(n);
+                  }
+                }}
+                onBlur={() => {
+                  if (draft == null) return;
+                  const n = Number(draft);
+                  if (draft !== '' && Number.isFinite(n)) commitNumber(n);
+                  else setDraft(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                }}
+                aria-label={field.label}
+              />
+              <button
+                type="button"
+                className={stepBtn}
+                aria-label={`Zwiększ: ${field.label}`}
+                disabled={field.max != null && committed >= field.max}
+                onClick={() => commitNumber(committed + step)}
+              >
+                +
+              </button>
+              {field.unit ? <span className="shrink-0 text-sm text-[var(--c-text-muted)]">{field.unit}</span> : null}
+            </div>
             {field.min != null && field.max != null ? (
-              <span className="text-xs text-[var(--c-text-muted)]">zakres {field.min}-{field.max}</span>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="range"
+                  className="h-1.5 w-full cursor-pointer accent-[var(--c-primary)]"
+                  min={field.min}
+                  max={field.max}
+                  step={step}
+                  value={clamp(Number(draft ?? committed) || committed)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    setDraft(String(n));
+                    if (sliderTimer.current) clearTimeout(sliderTimer.current);
+                    sliderTimer.current = setTimeout(() => commitNumber(n), 180);
+                  }}
+                  aria-label={`${field.label} (suwak)`}
+                />
+                <span className="shrink-0 text-xs tabular-nums text-[var(--c-text-muted)]">
+                  {field.min}–{field.max}
+                </span>
+              </div>
             ) : null}
           </div>
         );
+      }
       case 'toggle':
         return (
           <button

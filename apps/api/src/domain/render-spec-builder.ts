@@ -125,6 +125,10 @@ export function buildRenderSpec(input: BuildRenderSpecInput): BuildRenderSpecOut
   for (const mod of input.modules) {
     const manifest = mod.manifest;
     const scale = moduleScale(manifest, input.widthMm, input.heightMm);
+    // Realna szerokość wyrenderowanego modułu: dla width_height równa żądanej,
+    // ale dla fixed/variant_only geometria NIE skaluje się i pivot, części
+    // sztywne oraz płaszczyzna lustra muszą wynikać z geometrii, nie z wymiaru.
+    const effWidthMm = manifest.baseWidthMm * scale[0];
     const isLeaf = mod.slot === 'door_leaf' || mod.slot === 'active_leaf' || mod.slot === 'passive_leaf';
 
     // Skrzydło: własna decyzja wg baseHingeSide. Pozostałe moduły (ościeżnica,
@@ -157,7 +161,7 @@ export function buildRenderSpec(input: BuildRenderSpecInput): BuildRenderSpecOut
           binding.role === 'hinges_public' ? 'hinge_axis' : 'handle_center';
         const anchor = anchorPosition(manifest, anchorKey);
         if (anchor) {
-          const newX = preserveEdgeDistanceX(anchor[0], manifest.baseWidthMm, input.widthMm);
+          const newX = preserveEdgeDistanceX(anchor[0], manifest.baseWidthMm, effWidthMm);
           positionMm = [Math.round(newX - anchor[0]), 0, 0];
         } else {
           positionMm = [0, 0, 0];
@@ -193,8 +197,10 @@ export function buildRenderSpec(input: BuildRenderSpecInput): BuildRenderSpecOut
     if (isAnimatedSlot && openingMode === 'swing') {
       const hinge = anchorPosition(manifest, 'hinge_axis');
       if (hinge) {
-        const scaledX = preserveEdgeDistanceX(hinge[0], manifest.baseWidthMm, input.widthMm);
-        const finalX = mirrored ? input.widthMm - scaledX : scaledX;
+        const scaledX = preserveEdgeDistanceX(hinge[0], manifest.baseWidthMm, effWidthMm);
+        // Lustro odbija względem płaszczyzny effWidth/2, więc odbita oś
+        // zawiasu to effWidth - x (a nie input.widthMm - x).
+        const finalX = mirrored ? effWidthMm - scaledX : scaledX;
         animationPivot = [Math.round(finalX + mod.offsetMm[0]), 0, 0];
       }
     }
