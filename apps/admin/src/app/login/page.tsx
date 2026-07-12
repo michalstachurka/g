@@ -21,7 +21,7 @@ export default function LoginPage() {
       setCsrf(session.csrfToken);
       const first = session.memberships[0];
       if (first) setTenantSlug(first.tenantSlug);
-      router.push('/panel');
+      router.push('/');
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -8,20 +8,20 @@ import { cn } from '@door/ui';
 import { adminApi, getTenantSlug, setCsrf, setTenantSlug, type AdminSession } from '@/lib/admin-api';
 
 const NAV: { href: string; label: string }[] = [
-  { href: '/panel', label: 'Pulpit' },
-  { href: '/panel/branding', label: 'Branding i interfejs' },
-  { href: '/panel/catalog', label: 'Katalog' },
-  { href: '/panel/fields', label: 'Kroki i pola' },
-  { href: '/panel/assets', label: 'Asset manager' },
-  { href: '/panel/bundles', label: 'Zestawy modułów' },
-  { href: '/panel/rules', label: 'Reguły' },
-  { href: '/panel/pricing', label: 'Cenniki' },
-  { href: '/panel/bom', label: 'BOM' },
-  { href: '/panel/templates', label: 'Szablony PDF' },
-  { href: '/panel/configurations', label: 'Konfiguracje' },
-  { href: '/panel/leads', label: 'Leady' },
-  { href: '/panel/users', label: 'Użytkownicy' },
-  { href: '/panel/audit', label: 'Audyt' },
+  { href: '/', label: 'Pulpit' },
+  { href: '/branding', label: 'Branding i interfejs' },
+  { href: '/catalog', label: 'Katalog' },
+  { href: '/fields', label: 'Kroki i pola' },
+  { href: '/assets', label: 'Asset manager' },
+  { href: '/bundles', label: 'Zestawy modułów' },
+  { href: '/rules', label: 'Reguły' },
+  { href: '/pricing', label: 'Cenniki' },
+  { href: '/bom', label: 'BOM' },
+  { href: '/templates', label: 'Szablony PDF' },
+  { href: '/configurations', label: 'Konfiguracje' },
+  { href: '/leads', label: 'Leady' },
+  { href: '/users', label: 'Użytkownicy' },
+  { href: '/audit', label: 'Audyt' },
 ];
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {

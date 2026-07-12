@@ -70,8 +70,12 @@ log "Start konfiguratora (:3000)..."
 PORT=3000 API_INTERNAL_URL="http://127.0.0.1:4000" pnpm --filter @door/configurator start &
 WEB_PID=$!
 
+log "Start panelu admina (:3001, pod /panel)..."
+PORT=3001 pnpm --filter @door/admin start &
+ADMIN_PID=$!
+
 # Sprzątanie przy zatrzymaniu kontenera.
-trap 'kill $API_PID $WORKER_PID $WEB_PID 2>/dev/null' TERM INT
+trap 'kill $API_PID $WORKER_PID $WEB_PID $ADMIN_PID 2>/dev/null' TERM INT
 
 log "Start proxy (publiczny port ${PORT:-8080})..."
 exec node infra/docker/proxy.mjs

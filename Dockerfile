@@ -24,7 +24,8 @@ RUN pnpm install --frozen-lockfile --prod=false \
   && pnpm --filter @door/api exec prisma generate \
   && pnpm --filter @door/api build \
   && node scripts/prepare-seed-assets.mjs \
-  && pnpm --filter @door/configurator build
+  && pnpm --filter @door/configurator build \
+  && pnpm --filter @door/admin build
 
 ENV NODE_ENV=production
 ENV STORAGE_DRIVER=fs

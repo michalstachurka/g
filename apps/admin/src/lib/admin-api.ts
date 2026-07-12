@@ -54,7 +54,7 @@ export async function adminFetch<T>(path: string, init?: RequestInit & { raw?: b
 
   const response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' });
   if (response.status === 401 && typeof window !== 'undefined' && !path.startsWith('/auth')) {
-    window.location.href = '/login';
+    window.location.href = (process.env.NEXT_PUBLIC_BASE_PATH ?? '') + '/login';
     throw new ApiError('Sesja wygasła', 401);
   }
   if (!response.ok) {

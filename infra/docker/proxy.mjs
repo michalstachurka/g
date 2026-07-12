@@ -4,21 +4,28 @@
  * originu przekierowuje do backendu. Dzięki temu frontend woła API bez CORS
  * i bez ujawniania portów wewnętrznych.
  *
- *   /public/*  /files/*  /docs*  -> API (4000)
- *   pozostałe                    -> configurator Next.js (3000)
+ *   /public/*  /files/*  /auth/*  /admin/*  /docs*  -> API (4000)
+ *   /panel/*                                        -> panel admina (3001)
+ *   pozostałe                                       -> configurator (3000)
  */
 import http from 'node:http';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const API = { host: '127.0.0.1', port: 4000 };
 const WEB = { host: '127.0.0.1', port: 3000 };
+const ADMIN = { host: '127.0.0.1', port: 3001 };
 
-const API_PREFIXES = ['/public', '/files', '/docs'];
+const API_PREFIXES = ['/public', '/files', '/auth', '/admin', '/docs'];
+const ADMIN_PREFIXES = ['/panel'];
+
+function matches(url, prefixes) {
+  return prefixes.some((p) => url === p || url.startsWith(p + '/') || url.startsWith(p + '?'));
+}
 
 function pick(url) {
-  return API_PREFIXES.some((p) => url === p || url.startsWith(p + '/') || url.startsWith(p + '?'))
-    ? API
-    : WEB;
+  if (matches(url, ADMIN_PREFIXES)) return ADMIN;
+  if (matches(url, API_PREFIXES)) return API;
+  return WEB;
 }
 
 const server = http.createServer((req, res) => {
@@ -37,4 +44,6 @@ const server = http.createServer((req, res) => {
   req.pipe(proxyReq);
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`[proxy] nasłuchuje na :${PORT} -> web:${WEB.port}, api:${API.port}`));
+server.listen(PORT, '0.0.0.0', () =>
+  console.log(`[proxy] nasłuchuje na :${PORT} -> web:${WEB.port}, admin:${ADMIN.port}, api:${API.port}`),
+);
