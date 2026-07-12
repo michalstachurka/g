@@ -58,7 +58,9 @@ export NODE_ENV=production
 export CHROMIUM_PATH=/usr/bin/chromium
 
 log "Start API (:4000)..."
-node apps/api/dist/main.js &
+# WAŻNE: wymuszamy PORT=4000 dla API. Hosting ustawia globalne PORT dla proxy;
+# bez tego API próbowałoby zająć port proxy i padało (konflikt portów).
+PORT=4000 node apps/api/dist/main.js &
 API_PID=$!
 
 log "Start workera..."
