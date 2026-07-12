@@ -214,19 +214,20 @@ const SPLITS = [
     modules: [
       {
         name: 'leaf',
+        // Model klienta (patrz scripts/convert-user-hidden.mjs): skrzydło
+        // z klamkami obustronnie, dopasowane 1:1 do otworu panelu ściany.
+        source: 'hidden-user.glb',
         semanticRole: 'door_leaf',
-        baseHingeSide: 'right',
+        baseHingeSide: 'left',
         keep: [
-          { index: 3, role: 'leaf_side_a' },
-          { index: 2, role: 'leaf_side_b' },
-          { index: 0, role: 'handle_inside' },
+          { index: 0, role: 'door_leaf' },
           { index: 1, role: 'handle_outside' },
+          { index: 2, role: 'handle_inside' },
         ],
-        anchors: { handle_center: [0], hinge_axis: 'leaf_right_edge' },
+        anchors: { handle_center: [1], hinge_axis: 'leaf_left_edge' },
         materialBindings: [
-          { slotKey: 'leaf_side_a', appliesToRoles: ['leaf_side_a'], side: 'a' },
-          { slotKey: 'leaf_side_b', appliesToRoles: ['leaf_side_b'], side: 'b' },
-          { slotKey: 'handle', appliesToRoles: ['handle_inside', 'handle_outside'] },
+          { slotKey: 'leaf_side_a', appliesToRoles: ['door_leaf'], side: 'a' },
+          { slotKey: 'handle', appliesToRoles: ['handle_outside', 'handle_inside'] },
         ],
       },
       {
@@ -237,6 +238,9 @@ const SPLITS = [
         // Przycinamy marginesy per-wierzchołek z zachowaniem otworu 1:1 na
         // skrzydle (skalowanie węzła zniekształciłoby otwór).
         trimToOpeningRevealMm: 150,
+        // Skrzydło pochodzi z innego pliku: otwór (dawne skrzydło, węzły 2 i 3
+        // źródła basic-hidden) dosuwamy do finalnej pozycji nowego skrzydła.
+        alignHoleToLeaf: [2, 3],
         keep: [{ index: 4, role: 'wall_panel' }],
         anchors: {},
         materialBindings: [{ slotKey: 'wall_panel', appliesToRoles: ['wall_panel'] }],
@@ -365,23 +369,49 @@ mkdirSync(OUT, { recursive: true });
 const manifestIndex = [];
 
 for (const split of SPLITS) {
-  const srcPath = join(SRC, split.source);
+  // Moduł może mieć własny plik źródłowy (np. skrzydło od klienta + ściana
+  // z modelu katalogowego).
+  const sourceOf = (moduleDef) => join(SRC, moduleDef.source ?? split.source);
+  const leafModule = split.modules.find((m) =>
+    ['door_leaf', 'active_leaf'].includes(m.semanticRole),
+  );
 
-  // Przesunięcie: stałe (shiftX) albo automatyczne centrowanie skrzydła
+  // Przesunięcie skrzydła: stałe (shiftX) albo automatyczne centrowanie
   // na baseWidth/2, aby kompozycja zajmowała przedział 0..baseWidth.
-  let shiftX = split.shiftX;
+  let leafShiftX = split.shiftX;
+  let leafFinal = null;
   if (split.centerLeafAtM != null) {
-    const probe = await io.read(srcPath);
+    const probe = await io.read(sourceOf(leafModule));
     const probeBoxes = probe.getRoot().getDefaultScene().listChildren().map((n) => nodeWorldBbox(n, 0));
     const [lmin, lmax] = leafXRange(split, probeBoxes);
-    shiftX = split.centerLeafAtM - (lmin + lmax) / 2;
-    console.log(`  ${split.modelKey}: skrzydło [${lmin.toFixed(3)}, ${lmax.toFixed(3)}] -> shiftX ${shiftX.toFixed(3)}`);
+    leafShiftX = split.centerLeafAtM - (lmin + lmax) / 2;
+    leafFinal = [lmin + leafShiftX, lmax + leafShiftX];
+    console.log(
+      `  ${split.modelKey}: skrzydło [${lmin.toFixed(3)}, ${lmax.toFixed(3)}] -> shiftX ${leafShiftX.toFixed(3)} (finalnie [${leafFinal[0].toFixed(3)}, ${leafFinal[1].toFixed(3)}])`,
+    );
   }
 
   for (const moduleDef of split.modules) {
-    const document = await io.read(srcPath);
+    const document = await io.read(sourceOf(moduleDef));
     const scene = document.getRoot().getDefaultScene();
     const children = scene.listChildren();
+
+    // Przesunięcie modułu: domyślnie jak skrzydło; moduł z alignHoleToLeaf
+    // (otwór w innym pliku niż skrzydło) dosuwa otwór do finalnej pozycji
+    // skrzydła.
+    let shiftX = leafShiftX;
+    let holeWorld = null;
+    if (moduleDef.alignHoleToLeaf) {
+      const rawBoxes = children.map((n) => nodeWorldBbox(n, 0));
+      let holeLo = Infinity;
+      let holeHi = -Infinity;
+      for (const idx of moduleDef.alignHoleToLeaf) {
+        holeLo = Math.min(holeLo, rawBoxes[idx].min[0]);
+        holeHi = Math.max(holeHi, rawBoxes[idx].max[0]);
+      }
+      shiftX = leafFinal[0] - holeLo;
+      holeWorld = [leafFinal[0], leafFinal[0] + (holeHi - holeLo)];
+    }
 
     // bboxy WSZYSTKICH węzłów źródłowych (do anchorów), z przesunięciem.
     const bboxes = children.map((n) => nodeWorldBbox(n, shiftX));
@@ -403,7 +433,7 @@ for (const split of SPLITS) {
     // Przycięcie panelu ściany do otworu 0..baseWidth + reveal (drzwi
     // ukryte/naświetle) - otwór drzwiowy zostaje 1:1 pod skrzydłem.
     if (moduleDef.trimToOpeningRevealMm != null) {
-      const [holeLo, holeHi] = leafXRange(split, bboxes);
+      const [holeLo, holeHi] = holeWorld ?? leafXRange(split, bboxes);
       const reveal = moduleDef.trimToOpeningRevealMm / 1000;
       const targetLo = 0 - reveal;
       const targetHi = split.baseWidthMm / 1000 + reveal;
@@ -430,10 +460,10 @@ for (const split of SPLITS) {
     const anchorBindings = [];
     for (const [anchor, sourceIndices] of Object.entries(moduleDef.anchors)) {
       let center;
-      if (sourceIndices === 'leaf_right_edge') {
+      if (sourceIndices === 'leaf_right_edge' || sourceIndices === 'leaf_left_edge') {
         const leafIdx = moduleDef.keep.find((k) => k.role === 'door_leaf' || k.role === 'leaf_side_a').index;
         const bb = bboxes[leafIdx];
-        center = [bb.max[0], 0, 0];
+        center = [sourceIndices === 'leaf_left_edge' ? bb.min[0] : bb.max[0], 0, 0];
       } else {
         const points = sourceIndices.map((i) => bboxes[i].center);
         center = [0, 1, 2].map((axis) => points.reduce((s, p) => s + p[axis], 0) / points.length);
