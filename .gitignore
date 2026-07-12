@@ -13,3 +13,4 @@ assets/seed-modules/
 # Duże pliki źródłowe o niepotwierdzonej licencji (patrz docs/LICENSE_AUDIT.md §3.2)
 assets/source-models/interior_trim_assets.glb
 assets/source-models/interior_trim_assets low.glb
+*.tsbuildinfo
