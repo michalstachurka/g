@@ -84,8 +84,10 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, config));
 
-  // Render/hosting ustawia PORT; lokalnie używamy API_PORT.
-  const port = Number(process.env.PORT ?? process.env.API_PORT ?? 4000);
+  // W jednym kontenerze (proxy) API musi wziąć swój port (API_PORT=4000), a nie
+  // globalne PORT hostingu, które należy do bramy - inaczej konflikt portów.
+  // Standalone (bez API_PORT) używa PORT hostingu.
+  const port = Number(process.env.API_PORT ?? process.env.PORT ?? 4000);
   await app.listen(port, '0.0.0.0');
   console.log(`API działa na porcie ${port} (OpenAPI: /docs)`);
 }
