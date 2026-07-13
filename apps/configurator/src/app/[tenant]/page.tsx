@@ -38,6 +38,14 @@ export default function CategoryPage({ params }: { params: Promise<{ tenant: str
       {error ? (
         <Card className="mt-8 p-6 text-sm text-[var(--c-error)]">Nie udało się pobrać katalogu. Spróbuj ponownie.</Card>
       ) : null}
+      {!isLoading && !error && categories?.length === 0 ? (
+        <Card className="mt-8 p-8 text-center">
+          <h2 className="text-lg font-semibold">Oferta w przygotowaniu</h2>
+          <p className="mt-2 text-sm text-[var(--c-text-muted)]">
+            Katalog produktów jest właśnie konfigurowany. Zajrzyj tu wkrótce.
+          </p>
+        </Card>
+      ) : null}
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {categories?.map((category) => {

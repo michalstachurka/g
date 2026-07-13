@@ -27,7 +27,7 @@ export default function CatalogPage() {
     <div className="max-w-5xl space-y-6">
       <PageHeader
         title="Katalog produktów"
-        description="Kategorie, rodziny i modele. Konfigurator startuje zawsze od sześciu kategorii systemowych; nazwy, opisy, kolejność i widoczność są edytowalne."
+        description="Kategorie, rodziny i modele - budujesz tu własną ofertę od zera. Typ systemowy kategorii steruje zachowaniem 3D (np. przesuwne, dwuskrzydłowe)."
       />
 
       <Card className="p-4">

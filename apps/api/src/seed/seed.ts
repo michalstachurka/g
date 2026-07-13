@@ -192,22 +192,26 @@ async function main() {
     });
   }
 
-  // ── Kategorie (sześć, zawsze) ─────────────────────────────────────────────
-  const categoryDefs: [string, string, string, string][] = [
-    ['ukryte', 'hidden', 'Drzwi ukryte', 'Skrzydło zlicowane z ościeżnicą, minimalistyczna linia.'],
-    ['pelne', 'solid', 'Drzwi pełne', 'Czekamy na model 3D producenta - kategoria będzie dostępna wkrótce.'],
-    ['szklane', 'glass', 'Drzwi szklane', 'Przeszklenia od subtelnych pasów po pełne tafle.'],
-    ['przesuwne', 'sliding', 'Drzwi przesuwne', 'Systemy naścienne i chowane w ścianie.'],
-    ['lustrzane', 'mirrored', 'Drzwi lustrzane', 'Tafle lustrzane po stronie A lub B.'],
-    ['dwuskrzydlowe', 'double', 'Drzwi dwuskrzydłowe', 'Reprezentacyjne wejścia dwuskrzydłowe.'],
-  ];
+  // ── Kategorie ─────────────────────────────────────────────────────────────
+  // W trybie bootstrap NIE tworzymy żadnych kategorii - klient dodaje własne
+  // w panelu (Katalog). Sześć kategorii przykładowych to wyłącznie demo/testy.
   const categories: Record<string, string> = {};
-  for (let i = 0; i < categoryDefs.length; i++) {
-    const [key, systemKey, name, description] = categoryDefs[i];
-    const category = await prisma.productCategory.create({
-      data: { tenantId: tenant.id, key, systemKey, name, description, order: i + 1 },
-    });
-    categories[key] = category.id;
+  if (mode === 'full') {
+    const categoryDefs: [string, string, string, string][] = [
+      ['ukryte', 'hidden', 'Drzwi ukryte', 'Skrzydło zlicowane z ościeżnicą, minimalistyczna linia.'],
+      ['pelne', 'solid', 'Drzwi pełne', 'Czekamy na model 3D producenta - kategoria będzie dostępna wkrótce.'],
+      ['szklane', 'glass', 'Drzwi szklane', 'Przeszklenia od subtelnych pasów po pełne tafle.'],
+      ['przesuwne', 'sliding', 'Drzwi przesuwne', 'Systemy naścienne i chowane w ścianie.'],
+      ['lustrzane', 'mirrored', 'Drzwi lustrzane', 'Tafle lustrzane po stronie A lub B.'],
+      ['dwuskrzydlowe', 'double', 'Drzwi dwuskrzydłowe', 'Reprezentacyjne wejścia dwuskrzydłowe.'],
+    ];
+    for (let i = 0; i < categoryDefs.length; i++) {
+      const [key, systemKey, name, description] = categoryDefs[i];
+      const category = await prisma.productCategory.create({
+        data: { tenantId: tenant.id, key, systemKey, name, description, order: i + 1 },
+      });
+      categories[key] = category.id;
+    }
   }
 
   const modelIds: Record<string, string> = {};
@@ -506,6 +510,9 @@ async function main() {
 
   // ── Kroki i pola ───────────────────────────────────────────────────────────
   async function step(key: string, title: string, order: number, categoryKey?: string, description?: string) {
+    // Krok przypięty do kategorii, której nie ma (bootstrap) - pomijamy;
+    // klient doda kroki kategorii w panelu razem z własnymi kategoriami.
+    if (categoryKey && !categories[categoryKey]) return null;
     return prisma.configuratorStep.create({
       data: {
         tenantId: tenant.id,
@@ -529,12 +536,13 @@ async function main() {
   };
 
   interface FieldSeed {
-    key: string; step: { id: string }; label: string; type: string; order: number;
+    key: string; step: { id: string } | null; label: string; type: string; order: number;
     required?: boolean; defaultValue?: string | number | boolean | null; tooltip?: string;
     unit?: string; min?: number; max?: number; stepSize?: number;
     groupId?: string; mapsTo3d?: string; section?: string;
   }
   async function field(def: FieldSeed) {
+    if (!def.step) return; // krok pominięty w bootstrapie
     await prisma.fieldDefinition.create({
       data: {
         tenantId: tenant.id,
