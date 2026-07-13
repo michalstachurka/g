@@ -34,6 +34,7 @@ import {
 import { StorageService } from '../storage/storage.service';
 import { AuditService } from '../services/audit.service';
 import { inspectGlb } from '../assets/glb-inspector';
+import { convertObjToGlb } from '../assets/obj-converter';
 import { publicId, sha256Hex } from '../common/utils';
 
 const MAX_GLB_BYTES = 50 * 1024 * 1024;
@@ -112,13 +113,32 @@ export class AdminAssetsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() body: Record<string, string>,
   ) {
-    if (!file) throw new BadRequestException('Brak pliku GLB.');
+    if (!file) throw new BadRequestException('Brak pliku (obsługiwane formaty: GLB, OBJ).');
     const meta = uploadMetaSchema.parse(body);
-    const report = inspectGlb(file.buffer);
+
+    // OBJ konwertujemy na brzegu do GLB - reszta pipeline'u (mapowanie ról,
+    // viewer, eksporty AR) pracuje wyłącznie na GLB.
+    let glbBuffer = file.buffer;
+    let objWarnings: string[] = [];
+    if (/\.obj$/i.test(file.originalname)) {
+      try {
+        const converted = await convertObjToGlb(file.buffer.toString('utf8'));
+        glbBuffer = converted.glb;
+        objWarnings = [
+          `Skonwertowano z OBJ (${converted.info.nodeCount} części, ${converted.info.triangleCount} trójkątów).`,
+          ...converted.info.warnings,
+        ];
+      } catch (error) {
+        throw new BadRequestException(`Konwersja OBJ nie powiodła się: ${(error as Error).message}`);
+      }
+    }
+
+    const report = inspectGlb(glbBuffer);
+    report.warnings.push(...objWarnings);
     if (!report.valid) {
       throw new BadRequestException(`Plik odrzucony: ${report.problems.join(' ')}`);
     }
-    const checksum = sha256Hex(file.buffer);
+    const checksum = sha256Hex(glbBuffer);
 
     let asset = await this.prisma.asset.findUnique({
       where: { tenantId_key: { tenantId: t.tenantId, key: meta.key } },
@@ -139,7 +159,7 @@ export class AdminAssetsController {
     });
     const version = (lastVersion?.version ?? 0) + 1;
     const storagePath = `private/assets/${t.tenantId}/${asset.id}/v${version}.glb`;
-    await this.storage.put(storagePath, file.buffer);
+    await this.storage.put(storagePath, glbBuffer);
 
     const created = await this.prisma.assetVersion.create({
       data: {
@@ -147,7 +167,7 @@ export class AdminAssetsController {
         version,
         status: 'draft',
         fileName: file.originalname,
-        byteSize: file.buffer.length,
+        byteSize: glbBuffer.length,
         checksum,
         storagePath,
         report: report as unknown as object,

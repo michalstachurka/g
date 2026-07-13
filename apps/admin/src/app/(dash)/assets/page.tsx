@@ -23,15 +23,15 @@ export default function AssetsPage() {
     <div className="max-w-5xl space-y-5">
       <PageHeader
         title="Asset manager"
-        description="Upload GLB, raport techniczny, wizualne mapowanie ról i publikacja. Publikacja jest zablokowana bez kompletnego manifestu (mapowanie, wymiary, pivot, skala)."
+        description="Upload GLB lub OBJ, raport techniczny, wizualne mapowanie ról i publikacja. Publikacja jest zablokowana bez kompletnego manifestu (mapowanie, wymiary, pivot, skala)."
       />
 
       <Card className="p-4">
-        <h2 className="mb-3 text-sm font-semibold">Wgraj nowy GLB</h2>
+        <h2 className="mb-3 text-sm font-semibold">Wgraj nowy model (GLB lub OBJ)</h2>
         <InlineForm
           submitLabel="Wgraj i przeskanuj"
           onSubmit={async () => {
-            if (!upload.file) throw new Error('Wybierz plik GLB.');
+            if (!upload.file) throw new Error('Wybierz plik GLB lub OBJ.');
             const result = await adminApi.uploadAsset(upload.file, {
               key: upload.key,
               name: upload.name,
@@ -45,10 +45,10 @@ export default function AssetsPage() {
           <TextInput label="Nazwa" required value={upload.name} onChange={(e) => setUpload({ ...upload, name: e.target.value })} />
           <TextInput label="Licencja/źródło (zalecane)" value={upload.licenseInfo} onChange={(e) => setUpload({ ...upload, licenseInfo: e.target.value })} />
           <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-[var(--c-text-muted)]">Plik GLB (max 50 MB)</span>
+            <span className="mb-1 block text-xs font-medium text-[var(--c-text-muted)]">Plik GLB lub OBJ (max 50 MB; OBJ jest konwertowany do GLB przy wgrywaniu)</span>
             <input
               type="file"
-              accept=".glb,model/gltf-binary"
+              accept=".glb,.obj,model/gltf-binary"
               required
               onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] ?? null })}
               className="text-xs"
