@@ -39,7 +39,7 @@ describe('integracja: konfigurator -> walidacja -> cena -> renderSpec', () => {
   it('evaluate zwraca cenę, renderSpec i wersje z jednego przeliczenia', async () => {
     if (!apiUp) return;
     const { json } = await evaluate('demo', {
-      categoryKey: 'pelne',
+      categoryKey: 'ukryte',
       modelKey: 'porta-lite-pelne',
       selections: { width_mm: 900, height_mm: 2100, din: 'left' },
       revision: 1,
@@ -55,7 +55,7 @@ describe('integracja: konfigurator -> walidacja -> cena -> renderSpec', () => {
   it('renderSpec publiczny nie zawiera pól zabronionych', async () => {
     if (!apiUp) return;
     const { json } = await evaluate('demo', {
-      categoryKey: 'pelne',
+      categoryKey: 'ukryte',
       modelKey: 'porta-lite-pelne',
       selections: { width_mm: 900, height_mm: 2100 },
       revision: 1,
@@ -66,7 +66,7 @@ describe('integracja: konfigurator -> walidacja -> cena -> renderSpec', () => {
   it('cała odpowiedź evaluate nie zawiera kosztu wewnętrznego ani BOM', async () => {
     if (!apiUp) return;
     const { json } = await evaluate('demo', {
-      categoryKey: 'pelne',
+      categoryKey: 'ukryte',
       modelKey: 'porta-lite-pelne',
       selections: { lock_type: 'wc' },
       revision: 1,
@@ -78,8 +78,8 @@ describe('integracja: konfigurator -> walidacja -> cena -> renderSpec', () => {
 
   it('zmiana DIN zmienia stronę zawiasów w renderSpec i diagramie', async () => {
     if (!apiUp) return;
-    const left = await evaluate('demo', { categoryKey: 'pelne', modelKey: 'porta-lite-pelne', selections: { din: 'left' }, revision: 1 });
-    const right = await evaluate('demo', { categoryKey: 'pelne', modelKey: 'porta-lite-pelne', selections: { din: 'right' }, revision: 1 });
+    const left = await evaluate('demo', { categoryKey: 'ukryte', modelKey: 'porta-lite-pelne', selections: { din: 'left' }, revision: 1 });
+    const right = await evaluate('demo', { categoryKey: 'ukryte', modelKey: 'porta-lite-pelne', selections: { din: 'right' }, revision: 1 });
     expect(left.json.renderSpec.openingDirection).toBe('left');
     expect(right.json.renderSpec.openingDirection).toBe('right');
     expect(left.json.renderSpec.dinDiagram.hingeSide).not.toBe(right.json.renderSpec.dinDiagram.hingeSide);
@@ -92,7 +92,7 @@ describe('integracja: konfigurator -> walidacja -> cena -> renderSpec', () => {
   it('reguła łazienki wymusza blokadę WC (automatyczna korekta)', async () => {
     if (!apiUp) return;
     const { json } = await evaluate('demo', {
-      categoryKey: 'pelne',
+      categoryKey: 'ukryte',
       modelKey: 'porta-lite-pelne',
       selections: { room: 'lazienka', lock_type: 'brak' },
       revision: 1,
@@ -116,7 +116,7 @@ describe('integracja: izolacja tenantów', () => {
     const save = await fetch(`${API}/public/demo/configurations`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ request: { categoryKey: 'pelne', modelKey: 'porta-lite-pelne', selections: { din: 'left' }, revision: 1 } }),
+      body: JSON.stringify({ request: { categoryKey: 'ukryte', modelKey: 'porta-lite-pelne', selections: { din: 'left' }, revision: 1 } }),
     });
     const { shareId } = (await save.json()) as { shareId: string };
     const crossTenant = await fetch(`${API}/public/tenant-b-test/configurations/${shareId}`);

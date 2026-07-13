@@ -199,49 +199,6 @@ const SPLITS = [
     ],
   },
   {
-    source: 'basic-hidden.glb',
-    modelKey: 'porta-invisible-ukryte',
-    // Viewer, kamera i ściana demo zakładają kompozycję w przedziale
-    // 0..baseWidth. Skrzydło (0.87 m) centrujemy na 0.45 m, a panel ściany
-    // przycinamy do otworu 0..0.9 m + reveal. Płaszczyzna lustra DIN = 450 mm,
-    // więc kompozycja odbija się sama na siebie (stabilny widok przy zmianie DIN).
-    shiftX: 0,
-    centerLeafAtM: 0.45,
-    baseWidthMm: 900,
-    baseHeightMm: 2100,
-    scalePolicy: 'variant_only',
-    // Zestaw o stałym wymiarze - geometria nie skaluje się do wymiaru,
-    // więc dopuszczamy wyłącznie rozmiar bazowy.
-    range: { minWidthMm: 900, maxWidthMm: 900, minHeightMm: 2100, maxHeightMm: 2100 },
-    modules: [
-      {
-        name: 'leaf',
-        // Model klienta (patrz scripts/convert-user-hidden.mjs): skrzydło
-        // z klamkami obustronnie. BEZ modułu ściany: ścianę wokół otworu
-        // i cienką ciemną ramkę rysuje scena viewera (własny panel ściany
-        // dublował ścianę sceny i wyglądał jak zbyt szeroka ościeżnica).
-        source: 'hidden-user.glb',
-        semanticRole: 'door_leaf',
-        baseHingeSide: 'left',
-        // Płyta klienta (lico + aluminiowa krawędź obwodowa) i czyste klamki
-        // przeniesione z basic-flat (osprzęt z bryły STL renderował się jako
-        // nieczytelne klocki). Krawędź celowo bez slotu materiałowego -
-        // zachowuje aluminiowy materiał z pliku.
-        keep: [
-          { index: 0, role: 'door_leaf' },
-          { index: 1, role: 'decor_strip' },
-          { index: 2, role: 'handle_outside' },
-          { index: 3, role: 'handle_inside' },
-        ],
-        anchors: { handle_center: [2], hinge_axis: 'leaf_left_edge' },
-        materialBindings: [
-          { slotKey: 'leaf_side_a', appliesToRoles: ['door_leaf'], side: 'a' },
-          { slotKey: 'handle', appliesToRoles: ['handle_outside', 'handle_inside'] },
-        ],
-      },
-    ],
-  },
-  {
     source: 'basic-frame.glb',
     modelKey: 'porta-vista-naswietle',
     shiftX: 0,

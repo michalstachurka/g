@@ -97,6 +97,26 @@ export default function ConfiguratorPage({
     );
   }
 
+  // Kategoria bez modeli: czytelna informacja zamiast pustego konfiguratora.
+  if (schema.models.length === 0) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center px-6 text-center">
+        <div className="max-w-md space-y-3">
+          <h1 className="text-xl font-semibold">{schema.category.name}</h1>
+          <p className="text-sm text-[var(--c-text-muted)]">
+            {schema.category.description || 'Czekamy na model 3D producenta - kategoria będzie dostępna wkrótce.'}
+          </p>
+          <Link
+            href={`/${tenant}`}
+            className="inline-block rounded-[var(--radius)] border border-[var(--c-border)] px-4 py-2 text-sm hover:border-[var(--c-primary)]"
+          >
+            ← Wróć do kategorii
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   const panelRight = branding.layout.preset !== 'panel_left';
   const globalErrors = (evaluate?.errors ?? []).filter((e) => !e.fieldKey);
 

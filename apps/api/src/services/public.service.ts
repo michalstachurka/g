@@ -74,6 +74,7 @@ export class PublicService {
       const ready = c.families.some((f) =>
         f.models.some((m) => m.bundle && m.bundle.status === 'published'),
       );
+      const hasModels = c.families.some((f) => f.models.length > 0);
       return {
         key: c.key,
         name: c.name,
@@ -83,7 +84,9 @@ export class PublicService {
         visualizationReady: ready,
         missingAssetNotice: ready
           ? null
-          : 'Wizualizacja 3D dla tej kategorii nie jest jeszcze dostępna. Konfiguracja i wycena działają normalnie.',
+          : hasModels
+            ? 'Wizualizacja 3D dla tej kategorii nie jest jeszcze dostępna. Konfiguracja i wycena działają normalnie.'
+            : 'Czekamy na model 3D producenta - kategoria będzie dostępna wkrótce.',
       };
     });
   }

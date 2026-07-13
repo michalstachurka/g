@@ -181,8 +181,8 @@ async function main() {
 
   // ── Kategorie (sześć, zawsze) ─────────────────────────────────────────────
   const categoryDefs: [string, string, string, string][] = [
-    ['ukryte', 'hidden', 'Drzwi ukryte', 'Skrzydło zlicowane ze ścianą, bez widocznej ościeżnicy.'],
-    ['pelne', 'solid', 'Drzwi pełne', 'Klasyczne i loftowe skrzydła pełne.'],
+    ['ukryte', 'hidden', 'Drzwi ukryte', 'Skrzydło zlicowane z ościeżnicą, minimalistyczna linia.'],
+    ['pelne', 'solid', 'Drzwi pełne', 'Czekamy na model 3D producenta - kategoria będzie dostępna wkrótce.'],
     ['szklane', 'glass', 'Drzwi szklane', 'Przeszklenia od subtelnych pasów po pełne tafle.'],
     ['przesuwne', 'sliding', 'Drzwi przesuwne', 'Systemy naścienne i chowane w ścianie.'],
     ['lustrzane', 'mirrored', 'Drzwi lustrzane', 'Tafle lustrzane po stronie A lub B.'],
@@ -211,7 +211,6 @@ async function main() {
     'porta-lite-szklane': sources.find((s) => s.catalogModel === 'basic-glass')!,
     'porta-loft-pelne': sources.find((s) => s.catalogModel === 'basic-apartment-solid')!,
     'porta-duo-dwuskrzydlowe': sources.find((s) => s.catalogModel === 'basic-double')!,
-    'porta-invisible-ukryte': sources.find((s) => s.catalogModel === 'basic-hidden')!,
     'porta-vista-naswietle': sources.find((s) => s.catalogModel === 'basic-frame')!,
   };
 
@@ -320,12 +319,6 @@ async function main() {
       { slot: 'passive_leaf', assetKey: 'porta-duo-dwuskrzydlowe.leaf-passive' },
       { slot: 'frame', assetKey: 'porta-duo-dwuskrzydlowe.frame' },
     ]],
-    // Drzwi ukryte: SAMO skrzydło - ścianę wokół otworu rysuje scena viewera
-    // (własny panel ściany dublował ścianę sceny i wyglądał jak gruba
-    // ościeżnica; wzorzec klienta to skrzydło z cienką ciemną ramką).
-    ['bundle-porta-invisible', [
-      { slot: 'door_leaf', assetKey: 'porta-invisible-ukryte.leaf' },
-    ]],
     ['bundle-porta-vista', [
       { slot: 'door_leaf', assetKey: 'porta-vista-naswietle.leaf' },
       { slot: 'frame', assetKey: 'porta-vista-naswietle.wall' },
@@ -356,12 +349,11 @@ async function main() {
 
   // ── Rodziny i modele ───────────────────────────────────────────────────────
   const familyDefs: [string, string, string][] = [
-    ['porta-lite', 'pelne', 'Porta Lite'],
+    ['porta-lite', 'ukryte', 'Porta Lite'],
     ['porta-lite-glass', 'szklane', 'Porta Lite Glass'],
-    ['porta-loft', 'pelne', 'Porta Loft'],
+    ['porta-loft', 'ukryte', 'Porta Loft'],
     ['porta-duo', 'dwuskrzydlowe', 'Porta Duo'],
-    ['porta-invisible', 'ukryte', 'Porta Invisible'],
-    ['porta-vista', 'pelne', 'Porta Vista'],
+    ['porta-vista', 'ukryte', 'Porta Vista'],
   ];
   const families: Record<string, string> = {};
   for (let i = 0; i < familyDefs.length; i++) {
@@ -376,13 +368,11 @@ async function main() {
     key: string; family: string; name: string; description: string; bundle: string;
     base: [number, number]; min: [number, number]; max: [number, number];
   }[] = [
-    { key: 'porta-lite-pelne', family: 'porta-lite', name: 'Lite Pełne', description: 'Gładkie skrzydło pełne z ościeżnicą stałą.', bundle: 'bundle-porta-lite-pelne', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
+    { key: 'porta-lite-pelne', family: 'porta-lite', name: 'Lite', description: 'Gładkie skrzydło zlicowane, ościeżnica stała.', bundle: 'bundle-porta-lite-pelne', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
     { key: 'porta-lite-szklane', family: 'porta-lite-glass', name: 'Lite Vetro', description: 'Skrzydło z dwoma pionowymi taflami szkła.', bundle: 'bundle-porta-lite-szklane', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
     { key: 'porta-loft-pelne', family: 'porta-loft', name: 'Loft Premium', description: 'Skrzydło z pochwytem i listwą ozdobną.', bundle: 'bundle-porta-loft-pelne', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
     { key: 'porta-duo-dwuskrzydlowe', family: 'porta-duo', name: 'Duo Classic', description: 'Drzwi dwuskrzydłowe ze skrzydłem aktywnym i biernym.', bundle: 'bundle-porta-duo', base: [1800, 2100], min: [1500, 1900], max: [2000, 2300] },
-    // Modele o stałej geometrii (scalePolicy=variant_only): rozmiar zestawu
-    // jest zablokowany - inne wymiary wymagałyby osobnych wariantów assetu.
-    { key: 'porta-invisible-ukryte', family: 'porta-invisible', name: 'Invisible', description: 'Drzwi ukryte zlicowane ze ścianą, zestaw o stałym wymiarze 900x2100.', bundle: 'bundle-porta-invisible', base: [900, 2100], min: [900, 2100], max: [900, 2100] },
+    // Zestaw o stałej geometrii (scalePolicy=variant_only): wymiar zablokowany.
     { key: 'porta-vista-naswietle', family: 'porta-vista', name: 'Vista z naświetlem', description: 'Skrzydło z przeszkleniem górnym w zabudowie, zestaw 900x2100.', bundle: 'bundle-porta-vista', base: [900, 2100], min: [900, 2100], max: [900, 2100] },
   ];
   const modelIds: Record<string, string> = {};
@@ -662,7 +652,6 @@ async function main() {
         { kind: 'base', modelKey: 'porta-lite-szklane', amount: 169900 },
         { kind: 'base', modelKey: 'porta-loft-pelne', amount: 209900 },
         { kind: 'base', modelKey: 'porta-duo-dwuskrzydlowe', amount: 329900 },
-        { kind: 'base', modelKey: 'porta-invisible-ukryte', amount: 379900 },
         { kind: 'base', modelKey: 'porta-vista-naswietle', amount: 359900 },
         { kind: 'option_surcharge', fieldKey: 'leaf_color_a', optionValue: 'orzech-ciemny', amount: 22000, label: 'Dekor orzech (strona A)', publicLine: true },
         { kind: 'option_surcharge', fieldKey: 'leaf_color_a', optionValue: 'zielen-butelkowa', amount: 18000, label: 'Kolor specjalny (strona A)', publicLine: true },
@@ -760,7 +749,7 @@ async function main() {
   const prismaService = new PrismaService();
   const evaluateService = new EvaluateService(prismaService);
   const demoRequest = {
-    categoryKey: 'pelne',
+    categoryKey: 'ukryte',
     modelKey: 'porta-lite-pelne',
     selections: {
       width_mm: 900,
@@ -792,7 +781,7 @@ async function main() {
     data: {
       tenantId: tenant.id,
       shareId: 'demo-' + randomToken(4),
-      categoryKey: 'pelne',
+      categoryKey: 'ukryte',
       modelKey: 'porta-lite-pelne',
       selections: evaluation.normalizedSelections as object,
       revision: 1,
