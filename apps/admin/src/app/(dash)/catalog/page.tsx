@@ -45,7 +45,17 @@ export default function CatalogPage() {
               checked={category.visible !== false}
               onChange={(e) => adminApi.updateEntity('categories', category.key, { visible: e.target.checked }).then(refresh)}
             />,
-            '',
+            <button
+              key="d"
+              className="text-xs text-[var(--c-error)] hover:underline"
+              onClick={() => {
+                if (confirm(`Usunąć kategorię "${category.name}" razem z jej rodzinami i modelami?`)) {
+                  adminApi.deleteEntity('categories', category.key).then(refresh);
+                }
+              }}
+            >
+              usuń
+            </button>,
           ])}
         />
         <div className="mt-3">
@@ -135,6 +145,16 @@ export default function CatalogPage() {
                   cofnij
                 </button>
               )}
+              <button
+                className="text-[var(--c-error)] hover:underline"
+                onClick={() => {
+                  if (confirm(`Usunąć model "${model.name}"?`)) {
+                    adminApi.deleteEntity('models', model.key).then(refresh);
+                  }
+                }}
+              >
+                usuń
+              </button>
             </span>,
           ])}
         />
