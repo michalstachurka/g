@@ -36,6 +36,19 @@ async function main() {
     );
   }
 
+  // Tryb: 'full' (lokalnie/testy - pełne demo, destrukcyjny restart) albo
+  // 'bootstrap' (hosting - tylko szkielet na świeżej bazie, NIGDY nie nadpisuje
+  // istniejących danych wprowadzonych przez klienta w panelu).
+  const mode = process.env.SEED_MODE === 'bootstrap' ? 'bootstrap' : 'full';
+  if (mode === 'bootstrap') {
+    const existing = await prisma.tenant.findUnique({ where: { slug: 'demo' } });
+    if (existing) {
+      console.log('Seed(bootstrap): tenant demo już istnieje - nic nie zmieniam.');
+      return;
+    }
+    console.log('Seed(bootstrap): świeża baza - tworzę szkielet (bez modeli i plików).');
+  }
+
   console.log('Seed: czyszczenie tenanta demo (idempotentny restart)...');
   await prisma.tenant.deleteMany({ where: { slug: { in: ['demo', 'tenant-b-test'] } } });
 
@@ -197,6 +210,9 @@ async function main() {
     categories[key] = category.id;
   }
 
+  const modelIds: Record<string, string> = {};
+  // Katalog demo (assety, bundle, rodziny, modele) tylko w trybie full.
+  if (mode === 'full') {
   // ── Assety: import modułów seedowych ──────────────────────────────────────
   const sources = JSON.parse(readFileSync(join(SOURCES_DIR, 'door-model-sources.json'), 'utf8')) as {
     catalogModel: string;
@@ -375,7 +391,6 @@ async function main() {
     // Zestaw o stałej geometrii (scalePolicy=variant_only): wymiar zablokowany.
     { key: 'porta-vista-naswietle', family: 'porta-vista', name: 'Vista z naświetlem', description: 'Skrzydło z przeszkleniem górnym w zabudowie, zestaw 900x2100.', bundle: 'bundle-porta-vista', base: [900, 2100], min: [900, 2100], max: [900, 2100] },
   ];
-  const modelIds: Record<string, string> = {};
   for (let i = 0; i < modelDefs.length; i++) {
     const def = modelDefs[i];
     const model = await prisma.productModel.create({
@@ -398,6 +413,8 @@ async function main() {
     });
     modelIds[def.key] = model.id;
   }
+
+  } // mode === 'full': koniec katalogu demo
 
   // ── Grupy opcji ────────────────────────────────────────────────────────────
   async function group(key: string, name: string, options: [string, string, string | null][]) {
@@ -648,11 +665,15 @@ async function main() {
       publishedById: owner.id,
       settings: { currency: 'PLN', taxRatePercent: 23, taxMode: 'gross', rounding: 'to_zloty', currencyRate: 1 },
       rules: [
-        { kind: 'base', modelKey: 'porta-lite-pelne', amount: 129900 },
-        { kind: 'base', modelKey: 'porta-lite-szklane', amount: 169900 },
-        { kind: 'base', modelKey: 'porta-loft-pelne', amount: 209900 },
-        { kind: 'base', modelKey: 'porta-duo-dwuskrzydlowe', amount: 329900 },
-        { kind: 'base', modelKey: 'porta-vista-naswietle', amount: 359900 },
+        ...(mode === 'full'
+          ? [
+              { kind: 'base', modelKey: 'porta-lite-pelne', amount: 129900 },
+              { kind: 'base', modelKey: 'porta-lite-szklane', amount: 169900 },
+              { kind: 'base', modelKey: 'porta-loft-pelne', amount: 209900 },
+              { kind: 'base', modelKey: 'porta-duo-dwuskrzydlowe', amount: 329900 },
+              { kind: 'base', modelKey: 'porta-vista-naswietle', amount: 359900 },
+            ]
+          : []),
         { kind: 'option_surcharge', fieldKey: 'leaf_color_a', optionValue: 'orzech-ciemny', amount: 22000, label: 'Dekor orzech (strona A)', publicLine: true },
         { kind: 'option_surcharge', fieldKey: 'leaf_color_a', optionValue: 'zielen-butelkowa', amount: 18000, label: 'Kolor specjalny (strona A)', publicLine: true },
         { kind: 'option_surcharge', fieldKey: 'leaf_color_b', optionValue: 'orzech-ciemny', amount: 22000, label: 'Dekor orzech (strona B)', publicLine: true },
@@ -690,7 +711,7 @@ async function main() {
   });
 
   // ── BOM ────────────────────────────────────────────────────────────────────
-  await prisma.bomRecipe.create({
+  if (mode === 'full') await prisma.bomRecipe.create({
     data: {
       tenantId: tenant.id,
       modelId: modelIds['porta-lite-pelne'],
@@ -745,7 +766,9 @@ async function main() {
     });
   }
 
-  // ── Przykładowa zapisana konfiguracja ─────────────────────────────────────
+  // ── Przykładowa zapisana konfiguracja (tylko full) ────────────────────────
+  let demoInfo: { shareId: string; priceGr: number } | null = null;
+  if (mode === 'full') {
   const prismaService = new PrismaService();
   const evaluateService = new EvaluateService(prismaService);
   const demoRequest = {
@@ -801,14 +824,21 @@ async function main() {
       checksum: evaluation.response.checksum,
     },
   });
+  demoInfo = { shareId: demoConfig.shareId, priceGr: evaluation.pricing!.amount };
   await prismaService.$disconnect();
+  } // mode === 'full': koniec konfiguracji pokazowej
 
   console.log('──────────────────────────────────────────────');
-  console.log('Seed zakończony.');
-  console.log(`Tenant: demo | Konfiguracja pokazowa: /demo/c/${demoConfig.shareId}`);
+  if (demoInfo) {
+    console.log('Seed zakończony (pełne demo).');
+    console.log(`Tenant: demo | Konfiguracja pokazowa: /demo/c/${demoInfo.shareId}`);
+    console.log(`Cena demo: ${(demoInfo.priceGr / 100).toFixed(2)} PLN`);
+  } else {
+    console.log('Seed zakończony (bootstrap): kategorie, kroki, materiały i cennik gotowe.');
+    console.log('Modele, rodziny i pliki GLB dodasz w panelu (Katalog / Assety 3D).');
+  }
   console.log(`Panel: ${adminEmail} (hasło z SEED_ADMIN_PASSWORD)`);
   console.log(`Role demo: sprzedaz@demo.local, produkcja@demo.local (to samo hasło)`);
-  console.log(`Cena demo: ${(evaluation.pricing!.amount / 100).toFixed(2)} PLN`);
 }
 
 main()

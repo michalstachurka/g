@@ -25,21 +25,28 @@ fi
 export API_PUBLIC_URL="${CONFIGURATOR_URL:-http://localhost:8080}"
 log "Publiczny adres: ${CONFIGURATOR_URL:-(lokalny)}"
 
-# ── PostgreSQL (dane w kontenerze - demo, ulotne) ──────────────────────────
-PGBIN="$(ls -d /usr/lib/postgresql/*/bin | head -1)"
-export PGDATA=/app/var/pgdata
-mkdir -p "$PGDATA" /app/var/storage
-chown -R postgres:postgres /app/var
-if [ ! -s "$PGDATA/PG_VERSION" ]; then
-  log "Inicjalizacja PostgreSQL..."
-  su postgres -c "$PGBIN/initdb -D $PGDATA -E UTF8 --auth=trust" >/dev/null
+# ── PostgreSQL ─────────────────────────────────────────────────────────────
+# Jeśli hosting podał DATABASE_URL (np. Railway Postgres), używamy go -
+# dane przetrwają wtedy redeploye. Bez niego: baza w kontenerze (ulotna).
+mkdir -p /app/var/storage
+if [ -n "${DATABASE_URL:-}" ]; then
+  log "Zewnętrzna baza danych (DATABASE_URL z hostingu) - pomijam lokalny PostgreSQL."
+else
+  PGBIN="$(ls -d /usr/lib/postgresql/*/bin | head -1)"
+  export PGDATA=/app/var/pgdata
+  mkdir -p "$PGDATA"
+  chown -R postgres:postgres /app/var
+  if [ ! -s "$PGDATA/PG_VERSION" ]; then
+    log "Inicjalizacja PostgreSQL..."
+    su postgres -c "$PGBIN/initdb -D $PGDATA -E UTF8 --auth=trust" >/dev/null
+  fi
+  log "Start PostgreSQL (lokalny, ulotny)..."
+  su postgres -c "$PGBIN/pg_ctl -D $PGDATA -o '-c listen_addresses=127.0.0.1 -p 5432' -w start" >/dev/null
+  su postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='doorconf'\"" | grep -q 1 \
+    || su postgres -c "createdb doorconf"
+  su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres'\"" >/dev/null 2>&1 || true
+  export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/doorconf"
 fi
-log "Start PostgreSQL..."
-su postgres -c "$PGBIN/pg_ctl -D $PGDATA -o '-c listen_addresses=127.0.0.1 -p 5432' -w start" >/dev/null
-su postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='doorconf'\"" | grep -q 1 \
-  || su postgres -c "createdb doorconf"
-su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres'\"" >/dev/null 2>&1 || true
-export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/doorconf"
 
 # ── Redis ──────────────────────────────────────────────────────────────────
 log "Start Redis..."
@@ -49,8 +56,8 @@ export REDIS_URL="redis://127.0.0.1:6379"
 # ── Migracje + seed ────────────────────────────────────────────────────────
 log "Migracje bazy..."
 pnpm --filter @door/api exec prisma migrate deploy || { log "BŁĄD migracji"; exit 1; }
-log "Seed tenanta demo..."
-node apps/api/dist/seed/seed.js || log "Seed pominięty/nieudany - kontynuuję."
+log "Seed (bootstrap - nie nadpisuje istniejących danych)..."
+SEED_MODE="${SEED_MODE:-bootstrap}" node apps/api/dist/seed/seed.js || log "Seed pominięty/nieudany - kontynuuję."
 
 # ── Procesy aplikacji ──────────────────────────────────────────────────────
 export API_PORT=4000
