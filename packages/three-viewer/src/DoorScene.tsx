@@ -31,7 +31,7 @@ export interface DoorSceneProps {
 /** Neutralna ściana demonstracyjna wokół otworu - element sceny, nie produktu. */
 function DemoWall({ widthM, heightM, color, flushHidden }: {
   widthM: number; heightM: number; color: string;
-  /** Drzwi ukryte: ściana zlicowana ze skrzydłem (z=0) + cienka ciemna ramka otworu. */
+  /** Drzwi ukryte: ściana zlicowana ze skrzydłem (z=0) + cienka srebrna rama ościeża. */
   flushHidden?: boolean;
 }) {
   const side = 1.4;
@@ -53,21 +53,21 @@ function DemoWall({ widthM, heightM, color, flushHidden }: {
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
       {flushHidden ? (
-        // Ościeże w kolorze ściany wypełnia luz wokół zlicowanego skrzydła
-        // (zestaw 900x2100: 15 mm po bokach, 30 mm u góry) - widoczna zostaje
-        // tylko naturalna szczelina cienia, bez żadnych dodatkowych ramek.
+        // Cienka srebrna (aluminiowa) rama ościeża wokół zlicowanego
+        // skrzydła: wypełnia luz (15 mm boki, 30 mm góra) i wystaje 4 mm
+        // poza otwór oraz 2 mm przed lico ściany - delikatna metalowa linia.
         <group>
-          <mesh position={[0.007, heightM / 2, 0]}>
-            <boxGeometry args={[0.014, heightM, thickness]} />
-            <meshStandardMaterial color={color} roughness={0.95} />
+          <mesh position={[0.00475, (heightM - 0.0305) / 2, 0]}>
+            <boxGeometry args={[0.0195, heightM - 0.0305, thickness + 0.004]} />
+            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
           </mesh>
-          <mesh position={[widthM - 0.007, heightM / 2, 0]}>
-            <boxGeometry args={[0.014, heightM, thickness]} />
-            <meshStandardMaterial color={color} roughness={0.95} />
+          <mesh position={[widthM - 0.00475, (heightM - 0.0305) / 2, 0]}>
+            <boxGeometry args={[0.0195, heightM - 0.0305, thickness + 0.004]} />
+            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
           </mesh>
-          <mesh position={[widthM / 2, heightM - 0.0145, 0]}>
-            <boxGeometry args={[widthM, 0.029, thickness]} />
-            <meshStandardMaterial color={color} roughness={0.95} />
+          <mesh position={[widthM / 2, heightM + (0.005 - 0.0305) / 2, 0]}>
+            <boxGeometry args={[widthM + 0.01, 0.0355, thickness + 0.004]} />
+            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
           </mesh>
         </group>
       ) : null}

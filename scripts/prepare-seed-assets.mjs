@@ -223,13 +223,17 @@ const SPLITS = [
         source: 'hidden-user.glb',
         semanticRole: 'door_leaf',
         baseHingeSide: 'left',
-        // Sama płyta, bez osprzętu klamki z modelu źródłowego (surowa bryła
-        // CAD renderowała się jako nieczytelne klocki) - drzwi ukryte
-        // działają jako push-to-open.
-        keep: [{ index: 0, role: 'door_leaf' }],
-        anchors: { hinge_axis: 'leaf_left_edge' },
+        // Płyta klienta + czyste klamki przeniesione z basic-flat
+        // (osprzęt z bryły STL renderował się jako nieczytelne klocki).
+        keep: [
+          { index: 0, role: 'door_leaf' },
+          { index: 1, role: 'handle_outside' },
+          { index: 2, role: 'handle_inside' },
+        ],
+        anchors: { handle_center: [1], hinge_axis: 'leaf_left_edge' },
         materialBindings: [
           { slotKey: 'leaf_side_a', appliesToRoles: ['door_leaf'], side: 'a' },
+          { slotKey: 'handle', appliesToRoles: ['handle_outside', 'handle_inside'] },
         ],
       },
     ],
