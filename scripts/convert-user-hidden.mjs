@@ -153,8 +153,15 @@ const material = out
   .setBaseColorFactor([0.72, 0.68, 0.64, 1])
   .setRoughnessFactor(0.6)
   .setMetallicFactor(0.05);
+// Aluminiowa krawędź obwodowa skrzydła: materiał autorski pliku, celowo BEZ
+// slotu publicznego (viewer zachowuje materiał, kolor stały jak ościeżnica).
+const aluminum = out
+  .createMaterial('aluminum_edge')
+  .setBaseColorFactor([0.8, 0.82, 0.84, 1])
+  .setRoughnessFactor(0.45)
+  .setMetallicFactor(0.4);
 
-function buildNode(name, compList) {
+function buildNode(name, compList, opts = {}) {
   if (!compList.length) return;
   // Geometria bez indeksów, z płaską normalną per trójkąt (styl CAD/STL);
   // bez normalnych MeshStandardMaterial renderuje się na czarno.
@@ -171,12 +178,14 @@ function buildNode(name, compList) {
       let n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
       const len = Math.hypot(n[0], n[1], n[2]) || 1;
       n = [n[0] / len, n[1] / len, n[2] / len];
+      if (opts.filter && !opts.filter(n)) continue;
       for (const p of pts) {
         positions.push(p[0], p[1], p[2]);
         normals.push(n[0], n[1], n[2]);
       }
     }
   }
+  if (!positions.length) return;
   const posAccessor = out
     .createAccessor()
     .setType('VEC3')
@@ -191,7 +200,7 @@ function buildNode(name, compList) {
     .createPrimitive()
     .setAttribute('POSITION', posAccessor)
     .setAttribute('NORMAL', nrmAccessor)
-    .setMaterial(material);
+    .setMaterial(opts.material ?? material);
   const mesh = out.createMesh(name).addPrimitive(prim);
   const node = out.createNode(name).setMesh(mesh);
   outScene.addChild(node);
@@ -207,36 +216,39 @@ function buildNode(name, compList) {
   );
 }
 
-buildNode('leaf', leafComps);
+// Lico płyty (normalne +-Z) osobno od krawędzi obwodowej: lico dostaje dekor
+// klienta (slot leaf_side_a), krawędź jest aluminiowa jak ościeżnica.
+buildNode('leaf', leafComps, { filter: (n) => Math.abs(n[2]) >= 0.7 });
+buildNode('leaf_edge', leafComps, { filter: (n) => Math.abs(n[2]) < 0.7, material: aluminum });
 // Osprzęt klamki z bryły STL pomijamy (nieczytelne klocki CAD) - zamiast
 // niego doklejamy czyste klamki z licencjonowanego modelu basic-flat
 // (te same, które renderują się poprawnie w drzwiach pełnych).
 await attachHandlesFromBasicFlat();
 
 /**
- * Kopiuje geometrię klamek (węzły 1 i 7 pliku basic-flat.glb) do wyjścia:
- * obrót 180 stopni wokół osi Y (dźwignia ma wskazywać zawiasy po lewej),
- * pozycja przy krawędzi zamkowej nowego skrzydła, przyleganie do lica płyty.
- * Materiał pliku jest bez znaczenia - runtime nakłada materiał slotu handle.
+ * Kopiuje KOMPLETNE klamki z basic-flat.glb (drzwi pełne): dźwignia
+ * (węzły 1/7) razem z rozetą (węzły 0/2). Obrót 180 stopni wokół pionowej
+ * osi w płaszczyźnie środkowej płyty źródłowej: para przechodzi na
+ * przeciwną stronę Z z zachowaniem złożenia (trzpień zostaje na rozecie),
+ * a dźwignia wskazuje zawiasy po lewej. Materiał pliku jest bez znaczenia -
+ * runtime nakłada materiał slotu handle.
  */
 async function attachHandlesFromBasicFlat() {
   const flat = await io.read(join(ROOT, 'assets/source-models/basic-flat.glb'));
   const flatChildren = flat.getRoot().getDefaultScene().listChildren();
   const LEAF_FACE_Z = 0.035; // połowa grubości płyty klienta
-  const HANDLE_CENTER_X = HOLE.x1 - 0.085; // 85 mm od krawędzi zamkowej
+  const STEM_TARGET_X = HOLE.x1 - 0.085; // oś trzpienia 85 mm od krawędzi zamkowej
+  // para wewnętrzna (-z) po obrocie trafia na przód (+z) i odwrotnie
   const specs = [
-    { index: 1, name: 'handle_front', faceSign: +1 },
-    { index: 7, name: 'handle_back', faceSign: -1 },
+    { leverIndex: 1, plateIndex: 0, name: 'handle_front', faceSign: +1 },
+    { leverIndex: 7, plateIndex: 2, name: 'handle_back', faceSign: -1 },
   ];
-  for (const spec of specs) {
-    const node = flatChildren[spec.index];
-    const mesh = node.getMesh();
-    if (!mesh) continue;
+
+  const nodeBbox = (node) => {
     const t = node.getTranslation();
-    // bbox źródłowy (świat pliku basic-flat)
     let min = [Infinity, Infinity, Infinity];
     let max = [-Infinity, -Infinity, -Infinity];
-    for (const prim of mesh.listPrimitives()) {
+    for (const prim of node.getMesh().listPrimitives()) {
       const pos = prim.getAttribute('POSITION');
       if (!pos) continue;
       const a = pos.getMin([]);
@@ -246,45 +258,56 @@ async function attachHandlesFromBasicFlat() {
         max[k] = Math.max(max[k], b[k] + t[k]);
       }
     }
-    const c = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2];
+    return { min, max };
+  };
+
+  for (const spec of specs) {
+    const lever = flatChildren[spec.leverIndex];
+    const plate = flatChildren[spec.plateIndex];
+    if (!lever?.getMesh() || !plate?.getMesh()) continue;
+    // oś obrotu: środek rozety w X, płaszczyzna środkowa płyty (z=0)
+    const plateBox = nodeBbox(plate);
+    const axisX = (plateBox.min[0] + plateBox.max[0]) / 2;
+
     const positions = [];
     const normals = [];
-    for (const prim of mesh.listPrimitives()) {
-      const pos = prim.getAttribute('POSITION');
-      const nrm = prim.getAttribute('NORMAL');
-      const idx = prim.getIndices();
-      if (!pos) continue;
-      const PA = pos.getArray();
-      const NA = nrm ? nrm.getArray() : null;
-      const IA = idx ? idx.getArray() : null;
-      const triCount = IA ? IA.length / 3 : pos.getCount() / 3;
-      for (let tt = 0; tt < triCount; tt++) {
-        // odwrócona kolejność wierzchołków: obrót 180Y zachowuje skrętność,
-        // ale trójkąty kopiujemy 1:1, więc kolejność zostaje.
-        for (let k = 0; k < 3; k++) {
-          const v = IA ? IA[tt * 3 + k] : tt * 3 + k;
-          // obrót 180 stopni wokół Y względem środka klamki
-          const lx = PA[v * 3] + t[0] - c[0];
-          const ly = PA[v * 3 + 1] + t[1] - c[1];
-          const lz = PA[v * 3 + 2] + t[2] - c[2];
-          positions.push(-lx, ly, -lz);
-          if (NA) normals.push(-NA[v * 3], NA[v * 3 + 1], -NA[v * 3 + 2]);
+    for (const node of [lever, plate]) {
+      const t = node.getTranslation();
+      for (const prim of node.getMesh().listPrimitives()) {
+        const pos = prim.getAttribute('POSITION');
+        const nrm = prim.getAttribute('NORMAL');
+        const idx = prim.getIndices();
+        if (!pos) continue;
+        const PA = pos.getArray();
+        const NA = nrm ? nrm.getArray() : null;
+        const IA = idx ? idx.getArray() : null;
+        const triCount = IA ? IA.length / 3 : pos.getCount() / 3;
+        for (let tt = 0; tt < triCount; tt++) {
+          for (let k = 0; k < 3; k++) {
+            const v = IA ? IA[tt * 3 + k] : tt * 3 + k;
+            // obrót 180 stopni wokół osi pionowej (axisX, z=0)
+            const x = PA[v * 3] + t[0];
+            const y = PA[v * 3 + 1] + t[1];
+            const z = PA[v * 3 + 2] + t[2];
+            positions.push(2 * axisX - x, y, -z);
+            if (NA) normals.push(-NA[v * 3], NA[v * 3 + 1], -NA[v * 3 + 2]);
+          }
         }
       }
     }
-    // pozycja docelowa: środek nad osią klamki, przyleganie do lica
+    // dosunięcie rozety do lica płyty klienta
     let zMin = Infinity;
     let zMax = -Infinity;
     for (let i = 2; i < positions.length; i += 3) {
       zMin = Math.min(zMin, positions[i]);
       zMax = Math.max(zMax, positions[i]);
     }
-    const zShift =
+    const dz =
       spec.faceSign > 0 ? LEAF_FACE_Z - 0.001 - zMin : -LEAF_FACE_Z + 0.001 - zMax;
+    const dx = STEM_TARGET_X - axisX;
     for (let i = 0; i < positions.length; i += 3) {
-      positions[i] += HANDLE_CENTER_X;
-      positions[i + 1] += c[1];
-      positions[i + 2] += zShift;
+      positions[i] += dx;
+      positions[i + 2] += dz;
     }
     const posAccessor = out
       .createAccessor()
@@ -303,7 +326,7 @@ async function attachHandlesFromBasicFlat() {
     const outMesh = out.createMesh(spec.name).addPrimitive(prim);
     outScene.addChild(out.createNode(spec.name).setMesh(outMesh));
     console.log(
-      `  klamka "${spec.name}": ${positions.length / 9} tri, y ${c[1].toFixed(3)}, x ${HANDLE_CENTER_X.toFixed(3)}, strona ${spec.faceSign > 0 ? '+z' : '-z'}`,
+      `  klamka "${spec.name}": ${positions.length / 9} tri (dźwignia+rozeta), oś x ${STEM_TARGET_X.toFixed(3)}, strona ${spec.faceSign > 0 ? '+z' : '-z'}`,
     );
   }
 }

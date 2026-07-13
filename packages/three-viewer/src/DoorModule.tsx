@@ -51,13 +51,17 @@ function buildModule(
     node.visible = part.visible;
     node.userData.semanticRole = part.role;
     node.userData.materialSlot = part.materialSlot;
+    // Część bez slotu materiałowego zachowuje materiał autorski z pliku
+    // (np. aluminiowa krawędź skrzydła drzwi ukrytych).
     const materialKey = part.materialSlot ? publicMaterials[part.materialSlot] : undefined;
     node.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
-        (child as THREE.Mesh).material = materials.instanceFor(
-          materialKey,
-          `${placement.publicAssetId}:${part.materialSlot ?? 'none'}`,
-        );
+        if (part.materialSlot) {
+          (child as THREE.Mesh).material = materials.instanceFor(
+            materialKey,
+            `${placement.publicAssetId}:${part.materialSlot}`,
+          );
+        }
         child.castShadow = true;
         child.receiveShadow = true;
       }

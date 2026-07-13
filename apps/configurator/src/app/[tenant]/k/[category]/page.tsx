@@ -255,40 +255,41 @@ export default function ConfiguratorPage({
         </div>
       </div>
 
-      {/* Pasek ceny i CTA */}
-      <div className="sticky bottom-0 border-t border-[var(--c-border)] bg-[var(--c-surface)] p-4">
-        {branding.layout.showPrice && evaluate?.priceSummary ? (
-          <div className="mb-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm text-[var(--c-text-muted)]">{priceLabel}</span>
-              <span className="text-xl font-semibold">
-                {evaluate.priceSummary.individualQuote
-                  ? 'Wycena indywidualna'
-                  : formatPrice(evaluate.priceSummary.amount, evaluate.priceSummary.currency)}
-              </span>
+      {/* Pasek ceny i CTA: na mobile jeden zwarty wiersz (cena + przycisk),
+          aby maksymalnie powiększyć przewijany obszar formularza. */}
+      <div className="sticky bottom-0 border-t border-[var(--c-border)] bg-[var(--c-surface)] px-3 py-2 lg:p-4">
+        <div className="flex items-center gap-3 lg:block">
+          {branding.layout.showPrice && evaluate?.priceSummary ? (
+            <div className="min-w-0 flex-1 lg:mb-3 lg:flex-none">
+              <div className="flex flex-col lg:flex-row lg:items-baseline lg:justify-between">
+                <span className="text-[11px] leading-tight text-[var(--c-text-muted)] lg:text-sm">{priceLabel}</span>
+                <span className="truncate text-base font-semibold leading-tight lg:text-xl">
+                  {evaluate.priceSummary.individualQuote
+                    ? 'Wycena indywidualna'
+                    : formatPrice(evaluate.priceSummary.amount, evaluate.priceSummary.currency)}
+                </span>
+              </div>
+              {branding.layout.showPriceLines && evaluate.priceSummary.lines?.length ? (
+                <details className="hidden text-xs text-[var(--c-text-muted)] lg:mt-1 lg:block">
+                  <summary className="cursor-pointer select-none">Szczegóły ceny</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {evaluate.priceSummary.lines.map((line, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{line.label}</span>
+                        <span>{formatPrice(line.amount, evaluate.priceSummary!.currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
             </div>
-            {branding.layout.showPriceLines && evaluate.priceSummary.lines?.length ? (
-              <details className="mt-1 text-xs text-[var(--c-text-muted)]">
-                <summary className="cursor-pointer select-none">Szczegóły ceny</summary>
-                <ul className="mt-1 space-y-0.5">
-                  {evaluate.priceSummary.lines.map((line, i) => (
-                    <li key={i} className="flex justify-between">
-                      <span>{line.label}</span>
-                      <span>{formatPrice(line.amount, evaluate.priceSummary!.currency)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-        <div className="flex gap-2">
-          <Button className="flex-1" disabled={!evaluate?.valid} onClick={() => setShareOpen(true)}>
+          ) : null}
+          <Button className="shrink-0 lg:w-full" disabled={!evaluate?.valid} onClick={() => setShareOpen(true)}>
             {useTextStatic(branding.texts, 'cta_save', 'Zapisz projekt')}
           </Button>
         </div>
         {!evaluate?.valid && evaluate ? (
-          <p className="mt-2 text-center text-xs text-[var(--c-error)]">Popraw błędy konfiguracji, aby zapisać projekt.</p>
+          <p className="mt-1.5 text-center text-xs text-[var(--c-error)]">Popraw błędy konfiguracji, aby zapisać projekt.</p>
         ) : null}
       </div>
     </div>

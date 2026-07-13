@@ -31,7 +31,7 @@ export interface DoorSceneProps {
 /** Neutralna ściana demonstracyjna wokół otworu - element sceny, nie produktu. */
 function DemoWall({ widthM, heightM, color, flushHidden }: {
   widthM: number; heightM: number; color: string;
-  /** Drzwi ukryte: ściana zlicowana ze skrzydłem (z=0) + cienka srebrna rama ościeża. */
+  /** Drzwi ukryte: ściana zlicowana ze skrzydłem (z=0), ościeże w kolorze ściany. */
   flushHidden?: boolean;
 }) {
   const side = 1.4;
@@ -53,21 +53,21 @@ function DemoWall({ widthM, heightM, color, flushHidden }: {
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
       {flushHidden ? (
-        // Cienka srebrna (aluminiowa) rama ościeża wokół zlicowanego
-        // skrzydła: wypełnia luz (15 mm boki, 30 mm góra) i wystaje 4 mm
-        // poza otwór oraz 2 mm przed lico ściany - delikatna metalowa linia.
+        // Ościeże w kolorze ściany wypełnia luz wokół zlicowanego skrzydła
+        // (15 mm boki, 30 mm góra) - żadnych dodatkowych ram w scenie;
+        // metalowa jest sama krawędź obwodowa skrzydła (część produktu).
         <group>
-          <mesh position={[0.00475, (heightM - 0.0305) / 2, 0]}>
-            <boxGeometry args={[0.0195, heightM - 0.0305, thickness + 0.004]} />
-            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
+          <mesh position={[0.007, heightM / 2, 0]}>
+            <boxGeometry args={[0.014, heightM, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
           </mesh>
-          <mesh position={[widthM - 0.00475, (heightM - 0.0305) / 2, 0]}>
-            <boxGeometry args={[0.0195, heightM - 0.0305, thickness + 0.004]} />
-            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
+          <mesh position={[widthM - 0.007, heightM / 2, 0]}>
+            <boxGeometry args={[0.014, heightM, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
           </mesh>
-          <mesh position={[widthM / 2, heightM + (0.005 - 0.0305) / 2, 0]}>
-            <boxGeometry args={[widthM + 0.01, 0.0355, thickness + 0.004]} />
-            <meshStandardMaterial color="#cdd1d5" roughness={0.45} metalness={0.4} />
+          <mesh position={[widthM / 2, heightM - 0.0145, 0]}>
+            <boxGeometry args={[widthM, 0.029, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
           </mesh>
         </group>
       ) : null}
@@ -116,7 +116,10 @@ function CameraRig({ widthM, heightM, viewSide, interactive }: {
     <OrbitControls
       ref={controls}
       enabled={interactive}
-      enablePan={false}
+      // Przesuwanie widoku: desktop - przeciąganie prawym przyciskiem myszy,
+      // mobile - przeciąganie dwoma palcami (gest dwupalcowy łączy zoom i pan).
+      enablePan
+      panSpeed={0.8}
       minDistance={1.1}
       maxDistance={8}
       maxPolarAngle={Math.PI * 0.55}
