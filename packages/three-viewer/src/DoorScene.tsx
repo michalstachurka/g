@@ -29,11 +29,15 @@ export interface DoorSceneProps {
 }
 
 /** Neutralna ściana demonstracyjna wokół otworu - element sceny, nie produktu. */
-function DemoWall({ widthM, heightM, color }: { widthM: number; heightM: number; color: string }) {
+function DemoWall({ widthM, heightM, color, flushHidden }: {
+  widthM: number; heightM: number; color: string;
+  /** Drzwi ukryte: ściana zlicowana ze skrzydłem (z=0) + cienka ciemna ramka otworu. */
+  flushHidden?: boolean;
+}) {
   const side = 1.4;
   const top = 0.7;
   const thickness = 0.1;
-  const z = thickness / 2 + 0.062;
+  const z = flushHidden ? 0 : thickness / 2 + 0.062;
   return (
     <group position-z={z}>
       <mesh position={[-side / 2, heightM / 2, 0]} receiveShadow>
@@ -48,6 +52,25 @@ function DemoWall({ widthM, heightM, color }: { widthM: number; heightM: number;
         <boxGeometry args={[widthM + side * 2, top, thickness]} />
         <meshStandardMaterial color={color} roughness={0.95} />
       </mesh>
+      {flushHidden ? (
+        // Ościeże w kolorze ściany wypełnia luz wokół zlicowanego skrzydła
+        // (zestaw 900x2100: 15 mm po bokach, 30 mm u góry) - widoczna zostaje
+        // tylko naturalna szczelina cienia, bez żadnych dodatkowych ramek.
+        <group>
+          <mesh position={[0.007, heightM / 2, 0]}>
+            <boxGeometry args={[0.014, heightM, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
+          </mesh>
+          <mesh position={[widthM - 0.007, heightM / 2, 0]}>
+            <boxGeometry args={[0.014, heightM, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
+          </mesh>
+          <mesh position={[widthM / 2, heightM - 0.0145, 0]}>
+            <boxGeometry args={[widthM, 0.029, thickness]} />
+            <meshStandardMaterial color={color} roughness={0.95} />
+          </mesh>
+        </group>
+      ) : null}
     </group>
   );
 }
@@ -222,7 +245,12 @@ export function DoorScene(props: DoorSceneProps) {
               />
             ))}
             {renderSpec.scene.background === 'studio' ? (
-              <DemoWall widthM={widthM} heightM={heightM} color="#dcd7ce" />
+              <DemoWall
+                widthM={widthM}
+                heightM={heightM}
+                color="#dcd7ce"
+                flushHidden={renderSpec.doorConstruction === 'hidden'}
+              />
             ) : null}
             <ContactShadows position={[widthM / 2, 0.001, 0]} scale={6} blur={2.4} opacity={0.4} far={2} />
             <mesh rotation-x={-Math.PI / 2} position={[widthM / 2, -0.002, 0]} receiveShadow>

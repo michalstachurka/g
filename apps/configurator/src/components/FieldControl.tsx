@@ -129,7 +129,7 @@ export function FieldControl({
               </button>
               {field.unit ? <span className="shrink-0 text-sm text-[var(--c-text-muted)]">{field.unit}</span> : null}
             </div>
-            {field.min != null && field.max != null ? (
+            {field.min != null && field.max != null && field.min < field.max ? (
               <div className="mt-2 flex items-center gap-2">
                 <input
                   type="range"

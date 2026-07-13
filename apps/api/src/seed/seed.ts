@@ -320,9 +320,11 @@ async function main() {
       { slot: 'passive_leaf', assetKey: 'porta-duo-dwuskrzydlowe.leaf-passive' },
       { slot: 'frame', assetKey: 'porta-duo-dwuskrzydlowe.frame' },
     ]],
+    // Drzwi ukryte: SAMO skrzydło - ścianę wokół otworu rysuje scena viewera
+    // (własny panel ściany dublował ścianę sceny i wyglądał jak gruba
+    // ościeżnica; wzorzec klienta to skrzydło z cienką ciemną ramką).
     ['bundle-porta-invisible', [
       { slot: 'door_leaf', assetKey: 'porta-invisible-ukryte.leaf' },
-      { slot: 'frame', assetKey: 'porta-invisible-ukryte.wall' },
     ]],
     ['bundle-porta-vista', [
       { slot: 'door_leaf', assetKey: 'porta-vista-naswietle.leaf' },
@@ -378,8 +380,10 @@ async function main() {
     { key: 'porta-lite-szklane', family: 'porta-lite-glass', name: 'Lite Vetro', description: 'Skrzydło z dwoma pionowymi taflami szkła.', bundle: 'bundle-porta-lite-szklane', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
     { key: 'porta-loft-pelne', family: 'porta-loft', name: 'Loft Premium', description: 'Skrzydło z pochwytem i listwą ozdobną.', bundle: 'bundle-porta-loft-pelne', base: [900, 2100], min: [700, 1900], max: [1000, 2300] },
     { key: 'porta-duo-dwuskrzydlowe', family: 'porta-duo', name: 'Duo Classic', description: 'Drzwi dwuskrzydłowe ze skrzydłem aktywnym i biernym.', bundle: 'bundle-porta-duo', base: [1800, 2100], min: [1500, 1900], max: [2000, 2300] },
-    { key: 'porta-invisible-ukryte', family: 'porta-invisible', name: 'Invisible', description: 'Drzwi ukryte zlicowane ze ścianą, osobne wykończenie strony A i B.', bundle: 'bundle-porta-invisible', base: [900, 2100], min: [850, 2050], max: [1000, 2200] },
-    { key: 'porta-vista-naswietle', family: 'porta-vista', name: 'Vista z naświetlem', description: 'Skrzydło z przeszkleniem górnym w zabudowie.', bundle: 'bundle-porta-vista', base: [900, 2100], min: [850, 2050], max: [1000, 2200] },
+    // Modele o stałej geometrii (scalePolicy=variant_only): rozmiar zestawu
+    // jest zablokowany - inne wymiary wymagałyby osobnych wariantów assetu.
+    { key: 'porta-invisible-ukryte', family: 'porta-invisible', name: 'Invisible', description: 'Drzwi ukryte zlicowane ze ścianą, zestaw o stałym wymiarze 900x2100.', bundle: 'bundle-porta-invisible', base: [900, 2100], min: [900, 2100], max: [900, 2100] },
+    { key: 'porta-vista-naswietle', family: 'porta-vista', name: 'Vista z naświetlem', description: 'Skrzydło z przeszkleniem górnym w zabudowie, zestaw 900x2100.', bundle: 'bundle-porta-vista', base: [900, 2100], min: [900, 2100], max: [900, 2100] },
   ];
   const modelIds: Record<string, string> = {};
   for (let i = 0; i < modelDefs.length; i++) {

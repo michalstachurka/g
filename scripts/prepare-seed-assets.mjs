@@ -11,7 +11,7 @@
  */
 import { NodeIO } from '@gltf-transform/core';
 import { prune } from '@gltf-transform/functions';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -210,40 +210,27 @@ const SPLITS = [
     baseWidthMm: 900,
     baseHeightMm: 2100,
     scalePolicy: 'variant_only',
-    range: { minWidthMm: 850, maxWidthMm: 1000, minHeightMm: 2050, maxHeightMm: 2200 },
+    // Zestaw o stałym wymiarze - geometria nie skaluje się do wymiaru,
+    // więc dopuszczamy wyłącznie rozmiar bazowy.
+    range: { minWidthMm: 900, maxWidthMm: 900, minHeightMm: 2100, maxHeightMm: 2100 },
     modules: [
       {
         name: 'leaf',
         // Model klienta (patrz scripts/convert-user-hidden.mjs): skrzydło
-        // z klamkami obustronnie, dopasowane 1:1 do otworu panelu ściany.
+        // z klamkami obustronnie. BEZ modułu ściany: ścianę wokół otworu
+        // i cienką ciemną ramkę rysuje scena viewera (własny panel ściany
+        // dublował ścianę sceny i wyglądał jak zbyt szeroka ościeżnica).
         source: 'hidden-user.glb',
         semanticRole: 'door_leaf',
         baseHingeSide: 'left',
-        keep: [
-          { index: 0, role: 'door_leaf' },
-          { index: 1, role: 'handle_outside' },
-          { index: 2, role: 'handle_inside' },
-        ],
-        anchors: { handle_center: [1], hinge_axis: 'leaf_left_edge' },
+        // Sama płyta, bez osprzętu klamki z modelu źródłowego (surowa bryła
+        // CAD renderowała się jako nieczytelne klocki) - drzwi ukryte
+        // działają jako push-to-open.
+        keep: [{ index: 0, role: 'door_leaf' }],
+        anchors: { hinge_axis: 'leaf_left_edge' },
         materialBindings: [
           { slotKey: 'leaf_side_a', appliesToRoles: ['door_leaf'], side: 'a' },
-          { slotKey: 'handle', appliesToRoles: ['handle_outside', 'handle_inside'] },
         ],
-      },
-      {
-        name: 'wall',
-        semanticRole: 'frame',
-        // Panel ściany źródłowej ma 1.8 m, a otwór drzwiowy jest przy jednej
-        // krawędzi - odsłonięta reszta ściany wyglądała jak drugie skrzydło.
-        // Przycinamy marginesy per-wierzchołek z zachowaniem otworu 1:1 na
-        // skrzydle (skalowanie węzła zniekształciłoby otwór).
-        trimToOpeningRevealMm: 150,
-        // Skrzydło pochodzi z innego pliku: otwór (dawne skrzydło, węzły 2 i 3
-        // źródła basic-hidden) dosuwamy do finalnej pozycji nowego skrzydła.
-        alignHoleToLeaf: [2, 3],
-        keep: [{ index: 4, role: 'wall_panel' }],
-        anchors: {},
-        materialBindings: [{ slotKey: 'wall_panel', appliesToRoles: ['wall_panel'] }],
       },
     ],
   },
@@ -255,7 +242,7 @@ const SPLITS = [
     baseWidthMm: 900,
     baseHeightMm: 2100,
     scalePolicy: 'variant_only',
-    range: { minWidthMm: 850, maxWidthMm: 1000, minHeightMm: 2050, maxHeightMm: 2200 },
+    range: { minWidthMm: 900, maxWidthMm: 900, minHeightMm: 2100, maxHeightMm: 2100 },
     modules: [
       {
         name: 'leaf',
@@ -366,6 +353,11 @@ function nodeWorldBbox(node, shiftX) {
 
 const io = new NodeIO();
 mkdirSync(OUT, { recursive: true });
+// Czyścimy stare wyjście - moduły usunięte z konfiguracji nie mogą zostawać
+// na dysku (seed wgrywa wszystkie pliki *.glb z tego katalogu).
+for (const f of readdirSync(OUT)) {
+  if (f.endsWith('.glb') || f.endsWith('.json')) rmSync(join(OUT, f));
+}
 const manifestIndex = [];
 
 for (const split of SPLITS) {
