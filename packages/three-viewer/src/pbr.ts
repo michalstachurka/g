@@ -42,6 +42,10 @@ export interface PbrMaterialOptions {
    */
   breakup?: number;
   envMapIntensity?: number;
+  /** Kontrast albedo (1 = bez zmian, <1 spłaszcza mocne plamy/ślady pacy). */
+  contrast?: number;
+  /** Siła normal mapy (1 = pełna; np. 0.5 wycisza relief mikrocementu). */
+  normalScale?: number;
 }
 
 /** aoMap wymaga drugiego setu UV - duplikujemy 'uv' jako 'uv1'. */
@@ -82,6 +86,8 @@ export function buildPbrMaterial(
   });
   if (set.normal) {
     material.normalMap = configuredClone(set.normal, false, options.repeat, anisotropy);
+    const ns = options.normalScale ?? 1;
+    material.normalScale.set(ns, ns);
   }
   if (set.bump) {
     material.bumpMap = configuredClone(set.bump, false, options.repeat, anisotropy);
@@ -102,10 +108,12 @@ export function buildPbrMaterial(
   const brighten = options.brighten ?? 1;
   const saturation = options.saturation ?? 1;
   const breakup = options.breakup ?? 0;
-  if (brighten !== 1 || saturation !== 1 || breakup !== 0) {
+  const contrast = options.contrast ?? 1;
+  if (brighten !== 1 || saturation !== 1 || breakup !== 0 || contrast !== 1) {
     const b = brighten.toFixed(4);
     const s = saturation.toFixed(4);
     const k = breakup.toFixed(4);
+    const ct = contrast.toFixed(4);
     material.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
@@ -113,6 +121,7 @@ export function buildPbrMaterial(
         {
           float _luma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
           diffuseColor.rgb = clamp(mix(vec3(_luma), diffuseColor.rgb, ${s}) * ${b}, 0.0, 1.0);
+          diffuseColor.rgb = clamp((diffuseColor.rgb - 0.5) * ${ct} + 0.5, 0.0, 1.0);
           #ifdef USE_MAP
           if (${k} > 0.0) {
             vec2 _w = vMapUv;
@@ -124,7 +133,7 @@ export function buildPbrMaterial(
         }`,
       );
     };
-    material.customProgramCacheKey = () => `pbr-${b}-${s}-${k}`;
+    material.customProgramCacheKey = () => `pbr-${b}-${s}-${k}-${ct}`;
   }
   return material;
 }

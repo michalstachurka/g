@@ -14,14 +14,13 @@ import { Spinner, cn } from '@door/ui';
  * przełączane przyciskami; swoboda orbity zachowana.
  */
 
-// Presety kamery: [pozycja, target]. Kadr asymetryczny, wys. ~1.5 m,
-// pokazuje drzwi + fragment strefy salonowej (mało sufitu i pustej podłogi).
-// Kadry po przekątnej: kamera z lewej (przy oknie) patrzy w narożnik drzwi/sofa,
-// więc w jednym ujęciu jest ściana drzwiowa (lewa) i strefa salonu (prawa).
+// Presety kamery: [pozycja, target]. Kadry po przekątnej pokoju (z narożnika
+// tylnego-prawego), wys. ~1.5 m: w jednym ujęciu ściana drzwiowa i ceglana
+// ściana z oknem. Wszystkie pozycje mieszczą się w klamrze CameraBounds.
 const CAMERA_PRESETS: { key: string; label: string; pos: [number, number, number]; target: [number, number, number] }[] = [
-  { key: 'salon', label: 'Widok ogólny', pos: [1.55, 1.66, 4.55], target: [3.5, 1.0, 1.3] },
-  { key: 'drzwi', label: 'Drzwi + salon', pos: [1.75, 1.5, 4.1], target: [3.3, 1.05, 1.0] },
-  { key: 'produkt', label: 'Zbliżenie drzwi', pos: [2.05, 1.45, 2.7], target: [2.45, 1.05, 0.1] },
+  { key: 'salon', label: 'Widok ogólny', pos: [4.85, 1.65, 4.75], target: [1.15, 1.1, 1.35] },
+  { key: 'drzwi', label: 'Drzwi + okno', pos: [4.6, 1.55, 4.4], target: [1.5, 1.05, 0.7] },
+  { key: 'produkt', label: 'Zbliżenie drzwi', pos: [2.75, 1.25, 3.2], target: [2.45, 1.08, 0] },
 ];
 
 function CameraPreset({ index }: { index: number }) {
@@ -88,9 +87,9 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
         <Canvas
           shadows
           // pixel ratio ograniczony (płynność na telefonach)
-          dpr={[1, 1.7]}
+          dpr={[1, 1.5]}
           camera={{ fov: 38, near: 0.05, far: 60, position: CAMERA_PRESETS[1].pos }}
-          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.32 }}
+          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }}
           onCreated={({ gl }) => {
             gl.shadowMap.type = THREE.PCFSoftShadowMap;
             gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -105,8 +104,8 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
           <OrbitControls
             makeDefault
             enablePan
-            minDistance={1.6}
-            maxDistance={8.5}
+            minDistance={1.2}
+            maxDistance={5}
             maxPolarAngle={Math.PI * 0.49}
             minPolarAngle={Math.PI * 0.14}
           />
