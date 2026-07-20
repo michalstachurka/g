@@ -28,11 +28,11 @@ import type { LoftVariant } from './loft-variants';
  *   światło      - w JSX na dole (WindowLight, hemisphereLight, reflektory).
  */
 
-// ── Wymiary (metry) ──────────────────────────────────────────────────────────
-const ROOM = { W: 6.8, H: 3.0, D: 6.0, wall: 0.2, ceil: 0.25, floor: 0.3 };
-const DOOR = { w: 0.9, h: 2.1, x0: 2.5, niche: 0.26 }; // otwór 90x210 + głębokość wnęki
-const WINDOW = { z0: 1.6, z1: 4.6, y0: 0.9, y1: 2.5 }; // otwór w ścianie ceglanej
-const BEAM = { zs: [1.9, 4.1], h: 0.16, flange: 0.14, web: 0.02, drop: 0.14 }; // 2 belki
+// ── Wymiary (metry) - skala mieszkania, nie magazynu ─────────────────────────
+const ROOM = { W: 5.4, H: 2.95, D: 5.2, wall: 0.2, ceil: 0.25, floor: 0.3 };
+const DOOR = { w: 0.9, h: 2.1, x0: 2.0, niche: 0.26 }; // otwór 90x210 + głębokość wnęki
+const WINDOW = { z0: 1.3, z1: 4.0, y0: 0.9, y1: 2.45 }; // otwór w ścianie ceglanej
+const BEAM = { zs: [1.55, 3.55], h: 0.15, flange: 0.13, web: 0.02, drop: 0.13 }; // 2 belki
 
 // metry świata na jeden kafel tekstury (realna skala, bez rozciągania)
 const BRICK_TILE = 1.85; // ~25 rzędów cegły/kafel -> ~7.5 cm na rząd
@@ -99,6 +99,20 @@ function makeSkyTexture(): THREE.Texture {
   return tex;
 }
 
+/** Miękki, okrągły cień kontaktowy (blob) pod meble - tani zamiennik SSAO. */
+function makeBlobTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  g.addColorStop(0, 'rgba(0,0,0,1)');
+  g.addColorStop(0.6, 'rgba(0,0,0,0.55)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
 export interface LoftRoomProps {
   variant: LoftVariant;
   texturesBase?: string;
@@ -134,16 +148,23 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
     const box = (w: number, h: number, d: number, r = 0) =>
       track(r > 0 ? (new RoundedBoxGeometry(w, h, d, 2, r) as THREE.BufferGeometry) : new THREE.BoxGeometry(w, h, d));
 
-    // materiały stałe (niezależne od wariantu)
-    const steel = new THREE.MeshStandardMaterial({ color: '#1c1d1f', roughness: 0.72, metalness: 0.85, envMapIntensity: 0.8 });
-    const sill = new THREE.MeshStandardMaterial({ color: '#c4c1ba', roughness: 0.85, metalness: 0 });
-    const stone = new THREE.MeshStandardMaterial({ color: '#d7d2c8', roughness: 0.7, metalness: 0 });
+    // materiały stałe, współdzielone (niezależne od wariantu). Grafit, nie czerń.
+    const steel = new THREE.MeshStandardMaterial({ color: '#26272b', roughness: 0.48, metalness: 0.85, envMapIntensity: 0.85 });
+    const graphite = new THREE.MeshStandardMaterial({ color: '#2a2b2f', roughness: 0.42, metalness: 0.75, envMapIntensity: 0.9 });
+    const sill = new THREE.MeshStandardMaterial({ color: '#c4c1ba', roughness: 0.82, metalness: 0 });
     const glass = new THREE.MeshPhysicalMaterial({
-      color: '#dfe6ea', roughness: 0.14, metalness: 0, transparent: true, opacity: 0.28,
-      envMapIntensity: 1.2, clearcoat: 0.4, clearcoatRoughness: 0.2,
+      color: '#dfe6ea', roughness: 0.13, metalness: 0, transparent: true, opacity: 0.26,
+      envMapIntensity: 1.3, clearcoat: 0.4, clearcoatRoughness: 0.2,
     });
     const sky = new THREE.MeshBasicMaterial({ map: makeSkyTexture() });
-    dispose.push(steel, sill, stone, glass, glass.map!, sky, sky.map!);
+    // tkaniny i meble (tanie: wysoki roughness, bez map włókien)
+    const fabric = new THREE.MeshStandardMaterial({ color: '#6d675e', roughness: 0.95, metalness: 0 }); // taupe/ciepły szary
+    const rug = new THREE.MeshStandardMaterial({ color: '#98917f', roughness: 0.98, metalness: 0 }); // greige
+    const wood = new THREE.MeshStandardMaterial({ color: '#5a4632', roughness: 0.55, metalness: 0 }); // ciemny dąb
+    const leaf = new THREE.MeshStandardMaterial({ color: '#5c6b52', roughness: 0.85, metalness: 0 }); // zgaszona zieleń
+    const pot = new THREE.MeshStandardMaterial({ color: '#8f8a80', roughness: 0.85, metalness: 0 });
+    const blobMat = new THREE.MeshBasicMaterial({ map: makeBlobTexture(), transparent: true, opacity: 0.42, depthWrite: false, color: '#000000' });
+    dispose.push(steel, graphite, sill, glass, glass.map!, sky, sky.map!, fabric, rug, wood, leaf, pot, blobMat, blobMat.map!);
 
     const mesh = (
       geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number],
@@ -290,23 +311,67 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
       mesh(track(new THREE.CylinderGeometry(0.05, 0.06, 0.11, 16)), steel, [dxc + dx, H - 0.2, 1.4], [Math.PI / 2.6, 0, 0], true, false);
     }
 
-    // ── REKWIZYTY (2-3, budują skalę i klimat, nie odciągają od drzwi) ──────
-    // 1) Smukły czarny grzejnik loftowy pod oknem (żeberka) - mocny sygnał skali.
-    const radMat = new THREE.MeshStandardMaterial({ color: '#2c2d31', roughness: 0.5, metalness: 0.6, envMapIntensity: 0.7 });
-    dispose.push(radMat);
-    const radZ0 = (WINDOW.z0 + WINDOW.z1) / 2 - 0.7;
-    mesh(box(0.05, 0.52, 1.5, 0.01), radMat, [0.14, 0.44, radZ0 + 0.7]); // korpus
-    for (let i = 0; i < 15; i++) {
-      mesh(box(0.09, 0.48, 0.02, 0.005), radMat, [0.15, 0.44, radZ0 + 0.06 + i * 0.093], undefined, true, false); // żeberka
+    // ── STREFA SALONOWA (spójny zestaw, prowadzi wzrok do drzwi) ────────────
+    // blob = miękki cień kontaktowy pod meblem (tani, zamiast SSAO)
+    const blob = (x: number, z: number, w: number, d: number) =>
+      mesh(track(new THREE.PlaneGeometry(w, d)), blobMat, [x, 0.012, z], [-Math.PI / 2, 0, 0], false, false);
+
+    // Sofa przy prawej ścianie (x=W), tyłem do niej, twarzą w głąb pokoju (-x).
+    // Bliżej przodu (mniejsze z) -> strefa salonu wypełnia pierwszy plan.
+    const sofaX = W - 0.48, sofaZ = 2.0, sofaW = 1.9; // szer. wzdłuż Z
+    blob(sofaX - 0.15, sofaZ, 1.5, sofaW + 0.5);
+    mesh(box(0.85, 0.18, sofaW, 0.06), fabric, [sofaX, 0.24, sofaZ]); // podstawa siedziska
+    mesh(box(0.28, 0.5, sofaW, 0.08), fabric, [sofaX + 0.34, 0.45, sofaZ]); // oparcie
+    for (let i = -1; i <= 1; i++) mesh(box(0.7, 0.16, sofaW / 3 - 0.04, 0.07), fabric, [sofaX - 0.03, 0.4, sofaZ + i * (sofaW / 3)]); // poduszki siedziska
+    for (const s of [-1, 1]) {
+      mesh(box(0.85, 0.42, 0.22, 0.07), fabric, [sofaX, 0.42, sofaZ + s * (sofaW / 2 + 0.11)]); // podłokietniki
+      mesh(box(0.6, 0.5, sofaW / 3 - 0.06, 0.08), fabric, [sofaX + 0.28, 0.62, sofaZ + s * (sofaW / 3)]); // poduszki oparcia
     }
-    // 2) Postument z jasnego betonu + subtelna, gładka bryła (rzeźba) - premium, minimal.
-    const decoX = 0.62, decoZ = 5.2;
-    mesh(box(0.32, 0.55, 0.32, 0.012), stone, [decoX, 0.275, decoZ]);
-    mesh(track(new THREE.CapsuleGeometry(0.1, 0.22, 6, 14)), stone, [decoX, 0.72, decoZ], [0, 0, 0.18]);
-    // 3) Gniazdko/detal ścienny na ścianie drzwiowej (skala, dyskretny).
-    const plate = new THREE.MeshStandardMaterial({ color: '#e7e7e4', roughness: 0.6 });
-    dispose.push(plate);
-    mesh(box(0.08, 0.08, 0.006, 0.008), plate, [dx0 - 0.45, 0.32, 0.004]);
+    for (const [dx, dz] of [[-0.35, -sofaW / 2 + 0.1], [-0.35, sofaW / 2 - 0.1], [0.3, -sofaW / 2 + 0.1], [0.3, sofaW / 2 - 0.1]] as const)
+      mesh(track(new THREE.CylinderGeometry(0.025, 0.025, 0.16, 8)), graphite, [sofaX + dx, 0.08, sofaZ + dz], undefined, false, false); // nóżki
+
+    // Dywan pod strefą (greige, płaski) - kotwiczy meble.
+    mesh(box(2.0, 0.012, 2.4, 0.004), rug, [sofaX - 0.9, 0.008, sofaZ], undefined, false, true);
+
+    // Stolik kawowy przed sofą (blat drewno, konstrukcja grafit).
+    const tX = sofaX - 1.05, tZ = sofaZ;
+    blob(tX, tZ, 1.3, 0.9);
+    mesh(box(1.0, 0.05, 0.55, 0.02), wood, [tX, 0.38, tZ]);
+    for (const [ex, ez] of [[-0.42, -0.22], [-0.42, 0.22], [0.42, -0.22], [0.42, 0.22]] as const)
+      mesh(box(0.04, 0.36, 0.04, 0.008), graphite, [tX + ex, 0.18, tZ + ez], undefined, false, false);
+
+    // Lampa podłogowa (łuk, grafit) przy dalszym końcu sofy - ciepły akcent.
+    const lampX = sofaX + 0.1, lampZ = sofaZ + sofaW / 2 + 0.45;
+    blob(lampX, lampZ, 0.5, 0.5);
+    mesh(track(new THREE.CylinderGeometry(0.16, 0.2, 0.03, 20)), graphite, [lampX, 0.02, lampZ], undefined, false, false); // podstawa
+    mesh(track(new THREE.CylinderGeometry(0.02, 0.02, 1.5, 10)), graphite, [lampX, 0.77, lampZ], undefined, true, false); // słup
+    mesh(track(new THREE.CylinderGeometry(0.02, 0.02, 0.9, 10)), graphite, [lampX - 0.42, 1.5, lampZ], [0, 0, Math.PI / 2.2], false, false); // ramię
+    mesh(track(new THREE.CylinderGeometry(0.11, 0.13, 0.16, 18, 1, true)), graphite, [lampX - 0.78, 1.4, lampZ], undefined, false, false); // klosz
+
+    // Element pionowy w dalszym rogu: wysoka roślina w prostej donicy.
+    const plX = W - 0.5, plZ = 4.5;
+    blob(plX, plZ, 0.6, 0.6);
+    mesh(track(new THREE.CylinderGeometry(0.16, 0.13, 0.42, 20, 1, false)), pot, [plX, 0.21, plZ], undefined, true, true);
+    mesh(track(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 8)), wood, [plX, 0.6, plZ], undefined, false, false); // pień
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      mesh(box(0.03, 0.7, 0.12, 0.01), leaf, [plX + Math.cos(a) * 0.12, 1.0 + (i % 2) * 0.12, plZ + Math.sin(a) * 0.12], [0.25 * Math.cos(a), a, 0.35 * Math.sin(a)], false, false); // liście
+    }
+
+    // Grzejnik loftowy pod oknem - żeberka jako InstancedMesh (1 draw call).
+    const radZ0 = (WINDOW.z0 + WINDOW.z1) / 2 - 0.7;
+    mesh(box(0.05, 0.52, 1.5, 0.01), graphite, [0.14, 0.44, radZ0 + 0.7]); // korpus
+    {
+      const finGeo = box(0.09, 0.48, 0.02, 0.005);
+      const fins = new THREE.InstancedMesh(finGeo, graphite, 15);
+      fins.castShadow = true;
+      const m = new THREE.Matrix4();
+      for (let i = 0; i < 15; i++) {
+        m.setPosition(0.15, 0.44, radZ0 + 0.06 + i * 0.093);
+        fins.setMatrixAt(i, m);
+      }
+      group.add(fins);
+    }
 
     return {
       group,
@@ -376,6 +441,8 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
       <hemisphereLight intensity={1.65} color="#eef1f4" groundColor="#9a9790" />
       <WindowLight color={variant.sunColor} intensity={variant.sunIntensity} />
       <directionalLight position={[5, 2.6, 5]} intensity={0.65} color="#e7ecf1" />
+      {/* ciepły akcent z lampy podłogowej (subtelny, nie dominuje nad dniem) */}
+      <pointLight position={[4.2, 1.35, 3.35]} intensity={4} distance={4} decay={2} color="#ffd9a0" castShadow={false} />
       {/* subtelne, neutralne reflektory z szyny */}
       <spotLight position={[DOOR.x0 + DOOR.w / 2 - 0.5, ROOM.H - 0.2, 1.4]} target-position={[DOOR.x0, 1.1, 0]} angle={0.6} penumbra={0.8} intensity={6} distance={6} color="#f2f3f5" castShadow={false} />
       <spotLight position={[DOOR.x0 + DOOR.w / 2 + 0.5, ROOM.H - 0.2, 1.4]} target-position={[DOOR.x0 + DOOR.w, 1.1, 0]} angle={0.6} penumbra={0.8} intensity={6} distance={6} color="#f2f3f5" castShadow={false} />
