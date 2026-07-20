@@ -41,3 +41,10 @@ licencji dokumentowanej w `assets/source-models/door-model-sources.json` oraz
 Pełne teksty licencji poszczególnych pakietów znajdują się w ich katalogach w
 `node_modules`. Aby wygenerować aktualne zestawienie, uruchom
 `pnpm run licenses:check`.
+
+## Tekstury sceny loftowej (tymczasowe)
+- `apps/configurator/public/textures/{brick,wood}/` - pliki `brick_*`/`hardwood2_*`
+  z repozytorium three.js (https://github.com/mrdoob/three.js), licencja MIT.
+  Oznaczone jako tymczasowe - do podmiany na zestawy CC0 (Poly Haven/ambientCG)
+  po otwarciu dostępu sieciowego środowiska. Szczegóły:
+  apps/configurator/public/textures/LICENSES.md
