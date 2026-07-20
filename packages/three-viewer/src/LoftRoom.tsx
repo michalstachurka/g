@@ -96,7 +96,7 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
             tint: variant.floorTint,
             roughness: 0.72,
             brighten: variant.floorBrighten,
-            saturation: 0.82,
+            saturation: 0.12,
             aoIntensity: 0.5,
           });
     if (variant.floor === 'concrete') {
@@ -110,7 +110,7 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
         tint: variant.wallTint,
         roughness: 0.9,
         brighten: variant.wallBrighten,
-        saturation: 0.82,
+        saturation: 0.12,
         aoIntensity: 0.55,
       });
     const plaster = wallMat();
@@ -190,9 +190,9 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
         <Lightformer position={[0, 4, 0]} scale={[6, 6, 1]} rotation={[Math.PI / 2, 0, 0]} intensity={0.3} color="#6b6660" />
       </Environment>
 
-      <hemisphereLight intensity={1.15} color="#ece5d8" groundColor="#7c756a" />
+      <hemisphereLight intensity={1.25} color="#eef0f2" groundColor="#83837f" />
       <WindowLight color={variant.sunColor} intensity={variant.sunIntensity} />
-      <directionalLight position={[3.5, 2.4, 5.5]} intensity={0.55} color="#e6e0d6" />
+      <directionalLight position={[3.5, 2.4, 5.5]} intensity={0.7} color="#e8ecf0" />
     </group>
   );
 }
