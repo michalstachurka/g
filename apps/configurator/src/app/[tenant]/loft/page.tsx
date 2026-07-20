@@ -49,20 +49,28 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
       <div className="min-h-0 flex-1 bg-[#181715]">
         <Canvas
           shadows
-          dpr={[1, 2]}
-          camera={{ fov: 45, near: 0.05, far: 60, position: [3.4, 1.6, 5.9] }}
-          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.28 }}
+          // pixel ratio ograniczony do 1.75 (płynność na telefonach)
+          dpr={[1, 1.75]}
+          camera={{ fov: 46, near: 0.05, far: 60, position: [4.6, 1.6, 4.6] }}
+          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.26 }}
+          onCreated={({ gl }) => {
+            gl.shadowMap.type = THREE.PCFSoftShadowMap;
+            gl.outputColorSpace = THREE.SRGBColorSpace;
+          }}
         >
           <Suspense fallback={null}>
             <LoftRoom variant={variant} />
           </Suspense>
+          {/* Swobodna orbita; target w centrum pomieszczenia, ograniczony dystans,
+              maxPolarAngle < 90° blokuje wejście kamery pod podłogę. */}
           <OrbitControls
-            target={[1, 1.25, 1.2]}
+            makeDefault
+            target={[3.0, 1.2, 2.4]}
             enablePan
-            minDistance={1.2}
-            maxDistance={10}
-            maxPolarAngle={Math.PI * 0.55}
-            minPolarAngle={Math.PI * 0.15}
+            minDistance={1.4}
+            maxDistance={8.5}
+            maxPolarAngle={Math.PI * 0.49}
+            minPolarAngle={Math.PI * 0.12}
           />
         </Canvas>
       </div>
