@@ -1,12 +1,7 @@
 /**
- * Warianty sceny loftowej - różne kombinacje tekstur/odcieni w ramach stylu.
- * Wybór wariantu należy do klienta (podgląd: /{tenant}/loft).
- *
- * UWAGA - tekstury tymczasowe: polityka sieciowa środowiska deweloperskiego
- * blokuje polyhaven.com/ambientcg.com, więc zestawy docelowe CC0 (kolor +
- * normal GL + roughness + AO) podmienimy po otwarciu sieci. Obecnie: cegła
- * i deski z repozytorium three.js (MIT - patrz public/textures/LICENSES.md),
- * beton jako materiał gładki (bez tekstury).
+ * Warianty tła loftowego. Klient wybrał wariant A (czerwona cegła + jasny
+ * beton) - jest głównym, dopracowanym wariantem na prawdziwych teksturach
+ * PBR CC0 z Poly Haven. B i C zostają jako alternatywy tonalne/podłogowe.
  */
 
 export type LoftFloorKind = 'concrete' | 'wood';
@@ -15,16 +10,16 @@ export interface LoftVariant {
   key: string;
   name: string;
   description: string;
-  /** Mnożnik koloru cegły (postarzanie/tonacja w ramach stylu loft). */
+  /** Mnożnik koloru cegły (tonacja w ramach stylu loft; #ffffff = oryginał). */
   brickTint: string;
-  /** Kolor tynku ściany drzwiowej. */
-  plasterColor: string;
+  /** Mnożnik koloru mikrocementu na ścianach + rozjaśnienie albedo. */
+  wallTint: string;
+  wallBrighten: number;
   floor: LoftFloorKind;
-  /** Kolor betonu (gdy floor=concrete; tymczasowo bez tekstury). */
-  concreteColor: string;
-  /** Mnożnik koloru desek (gdy floor=wood). */
-  woodTint: string;
-  /** Temperatura światła z okna. */
+  /** Mnożnik koloru podłogi + rozjaśnienie albedo. */
+  floorTint: string;
+  floorBrighten: number;
+  /** Temperatura i moc światła dziennego z okna. */
   sunColor: string;
   sunIntensity: number;
 }
@@ -32,38 +27,41 @@ export interface LoftVariant {
 export const LOFT_VARIANTS: LoftVariant[] = [
   {
     key: 'a',
-    name: 'Czerwona cegła + jasny beton',
-    description: 'Naturalna czerwień cegły, jasnoszary beton, neutralny tynk.',
+    name: 'Czerwona cegła + mikrocement',
+    description: 'Czerwona cegła na ścianie z oknem, ciepły mikrocement na podłodze i ścianie drzwiowej (wg referencji).',
     brickTint: '#ffffff',
-    plasterColor: '#a8a29b',
+    wallTint: '#efe7db',
+    wallBrighten: 1.5,
     floor: 'concrete',
-    concreteColor: '#9d9a94',
-    woodTint: '#ffffff',
-    sunColor: '#ffd9b0',
-    sunIntensity: 2.1,
+    floorTint: '#e6ddcf',
+    floorBrighten: 1.35,
+    sunColor: '#ffe3bd',
+    sunIntensity: 3.0,
   },
   {
     key: 'b',
-    name: 'Terakota + ciemny beton',
-    description: 'Przydymiona terakota, ciemniejszy beton przemysłowy, cieplejsze światło.',
-    brickTint: '#d9a67c',
-    plasterColor: '#948d85',
+    name: 'Terakota + jaśniejszy mikrocement',
+    description: 'Przydymiona terakota i jaśniejszy, chłodniejszy mikrocement.',
+    brickTint: '#e6b892',
+    wallTint: '#f2efe8',
+    wallBrighten: 1.75,
     floor: 'concrete',
-    concreteColor: '#827e78',
-    woodTint: '#ffffff',
-    sunColor: '#ffcf9e',
-    sunIntensity: 2.4,
+    floorTint: '#ece7de',
+    floorBrighten: 1.6,
+    sunColor: '#ffd9a8',
+    sunIntensity: 2.7,
   },
   {
     key: 'c',
     name: 'Czerwona cegła + deski',
-    description: 'Cegła jak w wariancie A, ale podłoga z desek zamiast betonu.',
+    description: 'Cegła jak w wariancie A, podłoga z desek, ściany w mikrocemencie.',
     brickTint: '#ffffff',
-    plasterColor: '#aba49c',
+    wallTint: '#efe7db',
+    wallBrighten: 1.5,
     floor: 'wood',
-    concreteColor: '#9d9a94',
-    woodTint: '#e8cba6',
-    sunColor: '#ffd9b0',
-    sunIntensity: 2.0,
+    floorTint: '#e8cba6',
+    floorBrighten: 1,
+    sunColor: '#ffe3bd',
+    sunIntensity: 2.8,
   },
 ];

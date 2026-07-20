@@ -3,6 +3,7 @@
 import { Suspense, use, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { LoftRoom, LOFT_VARIANTS } from '@door/three-viewer';
@@ -46,7 +47,12 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
         <span className="w-full text-xs text-[var(--c-text-muted)] sm:w-auto">{variant.description}</span>
       </div>
       <div className="min-h-0 flex-1 bg-[#181715]">
-        <Canvas shadows dpr={[1, 2]} camera={{ fov: 45, near: 0.05, far: 60, position: [3.4, 1.6, 5.9] }}>
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          camera={{ fov: 45, near: 0.05, far: 60, position: [3.4, 1.6, 5.9] }}
+          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.28 }}
+        >
           <Suspense fallback={null}>
             <LoftRoom variant={variant} />
           </Suspense>

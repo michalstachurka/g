@@ -45,6 +45,6 @@ Pełne teksty licencji poszczególnych pakietów znajdują się w ich katalogach
 ## Tekstury sceny loftowej (tymczasowe)
 - `apps/configurator/public/textures/{brick,wood}/` - pliki `brick_*`/`hardwood2_*`
   z repozytorium three.js (https://github.com/mrdoob/three.js), licencja MIT.
-  Oznaczone jako tymczasowe - do podmiany na zestawy CC0 (Poly Haven/ambientCG)
+  Cegla brick_wall_006 i mikrocement brushed_concrete z Poly Haven sa na licencji CC0. Deski (wariant C) pozostaja MIT z three.js. Szczegoly: apps/configurator/public/textures/LICENSES.md
   po otwarciu dostępu sieciowego środowiska. Szczegóły:
   apps/configurator/public/textures/LICENSES.md

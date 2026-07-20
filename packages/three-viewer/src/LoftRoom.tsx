@@ -3,50 +3,54 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useLoader } from '@react-three/fiber';
-import { buildPbrMaterial, preparePbrGeometryForAo } from './pbr';
+import { Environment, Lightformer } from '@react-three/drei';
+import { buildPbrMaterial, preparePbrGeometryForAo, type PbrTextureSet } from './pbr';
 import type { LoftVariant } from './loft-variants';
 
 /**
- * Scena pomieszczenia w stylu loft (tło do wizualizacji drzwi).
- * Kompozycja wg referencji klienta: ściana drzwiowa z szarego tynku,
- * ceglana ściana boczna z przemysłowym oknem (czarna stal), betonowa lub
- * drewniana podłoga, czarny słup stalowy, ciemny sufit z belkami,
- * ciepłe światło dzienne z okna.
- *
- * Wymiary w metrach. Ściana drzwiowa w płaszczyźnie z=0 (x: -2.4..4.4),
- * przyszłe drzwi staną w okolicy x 0..1.
+ * Scena pomieszczenia w stylu loft (tło do wizualizacji drzwi) na prawdziwych
+ * teksturach PBR CC0 (Poly Haven): czerwona cegła (brick_wall_006) na ścianie
+ * bocznej z przemysłowym oknem, mikrocement (brushed_concrete) na podłodze
+ * i ścianie drzwiowej. Kompozycja wg referencji klienta:
+ * czarny słup stalowy, ciemny sufit z belkami i szyną reflektorów, ciepłe
+ * światło dzienne z okna. Wymiary w metrach; ściana drzwiowa w z=0.
  */
 
-const ROOM = {
-  xMin: -2.4,
-  xMax: 4.4,
-  height: 3.2,
-  depth: 6.5,
-  wallThickness: 0.25,
-};
+const ROOM = { xMin: -2.4, xMax: 4.4, height: 3.2, depth: 6.5, wallThickness: 0.25 };
 
 /** Ile metrów świata pokrywa jeden kafel tekstury (dobrane pod realną skalę). */
-const BRICK_TILE_M = 1.35; // ~6.5 cm rząd cegły przy ~20 rzędach na kafel
-const WOOD_TILE_M = 1.6; // deski ~12 cm szerokości
+const BRICK_TILE_M = 2.0; // ~25 rzędów cegły/kafel -> ~8 cm na rząd
+const MICRO_FLOOR_TILE_M = 3.4; // mikrocement na podłodze - duże pole bez widocznego kafla
+const MICRO_WALL_TILE_M = 2.8; // mikrocement na ścianie - widoczne ślady pacy
+const WOOD_TILE_M = 1.6;
 
 export interface LoftRoomProps {
   variant: LoftVariant;
-  /** Baza URL tekstur (public/textures). */
   texturesBase?: string;
 }
 
 export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps) {
-  const [brickColor, brickBump, brickRough, woodColor, woodBump, woodRough] = useLoader(
-    THREE.TextureLoader,
-    [
-      `${texturesBase}/brick/color.jpg`,
-      `${texturesBase}/brick/bump.jpg`,
-      `${texturesBase}/brick/roughness.jpg`,
-      `${texturesBase}/wood/color.jpg`,
-      `${texturesBase}/wood/bump.jpg`,
-      `${texturesBase}/wood/roughness.jpg`,
-    ],
-  );
+  const tex = useLoader(THREE.TextureLoader, [
+    `${texturesBase}/brick/color.jpg`,
+    `${texturesBase}/brick/normal.jpg`,
+    `${texturesBase}/brick/roughness.jpg`,
+    `${texturesBase}/brick/ao.jpg`,
+    `${texturesBase}/microcement/color.jpg`,
+    `${texturesBase}/microcement/normal.jpg`,
+    `${texturesBase}/microcement/roughness.jpg`,
+    `${texturesBase}/microcement/ao.jpg`,
+    `${texturesBase}/wood/color.jpg`,
+    `${texturesBase}/wood/bump.jpg`,
+    `${texturesBase}/wood/roughness.jpg`,
+  ]);
+  const [
+    brickColor, brickNormal, brickRough, brickAo,
+    mcColor, mcNormal, mcRough, mcAo,
+    woodColor, woodBump, woodRough,
+  ] = tex;
+
+  const brickSet: PbrTextureSet = { color: brickColor, normal: brickNormal, roughness: brickRough, ao: brickAo };
+  const microSet: PbrTextureSet = { color: mcColor, normal: mcNormal, roughness: mcRough, ao: mcAo };
 
   const group = useMemo(() => {
     const g = new THREE.Group();
@@ -70,93 +74,68 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
       return mesh;
     };
 
-    // ── materiały ────────────────────────────────────────────────────────────
+    // ── materiały ──────────────────────────────────────────────────────────
     const brickMat = (widthM: number, heightM: number) =>
-      buildPbrMaterial(
-        { color: brickColor, bump: brickBump, roughness: brickRough },
-        {
-          repeat: [widthM / BRICK_TILE_M, heightM / BRICK_TILE_M],
-          tint: variant.brickTint,
-          bumpScale: 0.05,
-        },
-      );
-    const plaster = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(variant.plasterColor),
-      roughness: 0.96,
-    });
-    const plasterSide = plaster.clone();
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: '#232326', roughness: 0.92 });
-    const steel = new THREE.MeshStandardMaterial({
-      color: '#1b1c1e',
-      roughness: 0.55,
-      metalness: 0.75,
-    });
-    const daylight = new THREE.MeshBasicMaterial({ color: '#f1ebdf' });
+      buildPbrMaterial(brickSet, {
+        repeat: [widthM / BRICK_TILE_M, heightM / BRICK_TILE_M],
+        tint: variant.brickTint,
+      });
 
+    const roomW = ROOM.xMax - ROOM.xMin;
+
+    // Mikrocement (brushed_concrete) - wg referencji klienta na podłodze i
+    // ścianie drzwiowej. Naturalny ciepły odcień; delikatny lift jasności.
     const floorMat =
       variant.floor === 'wood'
         ? buildPbrMaterial(
             { color: woodColor, bump: woodBump, roughness: woodRough },
-            {
-              repeat: [
-                (ROOM.xMax - ROOM.xMin) / WOOD_TILE_M,
-                ROOM.depth / WOOD_TILE_M,
-              ],
-              tint: variant.woodTint,
-              bumpScale: 0.02,
-            },
+            { repeat: [roomW / WOOD_TILE_M, ROOM.depth / WOOD_TILE_M], tint: variant.floorTint, bumpScale: 0.02 },
           )
-        : new THREE.MeshStandardMaterial({
-            color: new THREE.Color(variant.concreteColor),
-            roughness: 0.9,
+        : buildPbrMaterial(microSet, {
+            repeat: [roomW / MICRO_FLOOR_TILE_M, ROOM.depth / MICRO_FLOOR_TILE_M],
+            tint: variant.floorTint,
+            roughness: 0.72,
+            brighten: variant.floorBrighten,
+            saturation: 0.82,
+            aoIntensity: 0.5,
           });
+    if (variant.floor === 'concrete') {
+      (floorMat as THREE.MeshStandardMaterial).envMapIntensity = 0.4;
+    }
 
-    const roomW = ROOM.xMax - ROOM.xMin;
+    // Ściana drzwiowa i prawa: ten sam mikrocement co podłoga (spójna zabudowa).
+    const wallMat = () =>
+      buildPbrMaterial(microSet, {
+        repeat: [roomW / MICRO_WALL_TILE_M, ROOM.height / MICRO_WALL_TILE_M],
+        tint: variant.wallTint,
+        roughness: 0.9,
+        brighten: variant.wallBrighten,
+        saturation: 0.82,
+        aoIntensity: 0.55,
+      });
+    const plaster = wallMat();
+    const plasterSide = wallMat();
+    const ceilingMat = new THREE.MeshStandardMaterial({ color: '#26262a', roughness: 0.9 });
+    const steel = new THREE.MeshStandardMaterial({ color: '#202124', roughness: 0.42, metalness: 0.85, envMapIntensity: 0.7 });
+    const daylight = new THREE.MeshBasicMaterial({ color: '#fdf7ec' });
 
     // ── podłoga i sufit ──────────────────────────────────────────────────────
-    add(new THREE.PlaneGeometry(roomW, ROOM.depth), floorMat, [
-      (ROOM.xMin + ROOM.xMax) / 2,
-      0,
-      ROOM.depth / 2,
-    ], { rotationX: -Math.PI / 2, receiveShadow: true });
-    add(new THREE.PlaneGeometry(roomW, ROOM.depth), ceilingMat, [
-      (ROOM.xMin + ROOM.xMax) / 2,
-      ROOM.height,
-      ROOM.depth / 2,
-    ], { rotationX: Math.PI / 2 });
+    add(new THREE.PlaneGeometry(roomW, ROOM.depth), floorMat, [(ROOM.xMin + ROOM.xMax) / 2, 0, ROOM.depth / 2], { rotationX: -Math.PI / 2, receiveShadow: true });
+    add(new THREE.PlaneGeometry(roomW, ROOM.depth), ceilingMat, [(ROOM.xMin + ROOM.xMax) / 2, ROOM.height, ROOM.depth / 2], { rotationX: Math.PI / 2 });
 
-    // belki sufitowe + szyna oświetleniowa (dekoracja jak w referencji)
     for (const z of [1.6, 3.6]) {
-      add(new THREE.BoxGeometry(roomW, 0.24, 0.18), ceilingMat.clone(), [
-        (ROOM.xMin + ROOM.xMax) / 2,
-        ROOM.height - 0.12,
-        z,
-      ], { castShadow: true });
+      add(new THREE.BoxGeometry(roomW, 0.24, 0.18), ceilingMat.clone(), [(ROOM.xMin + ROOM.xMax) / 2, ROOM.height - 0.12, z], { castShadow: true });
     }
-    add(new THREE.BoxGeometry(1.7, 0.04, 0.05), steel.clone(), [1.0, ROOM.height - 0.3, 2.6], {
-      castShadow: true,
-    });
+    add(new THREE.BoxGeometry(1.7, 0.04, 0.05), steel.clone(), [1.0, ROOM.height - 0.3, 2.6], { castShadow: true });
     for (const x of [0.45, 1.55]) {
-      add(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 16), steel.clone(), [
-        x,
-        ROOM.height - 0.42,
-        2.6,
-      ], { castShadow: true });
+      add(new THREE.CylinderGeometry(0.045, 0.045, 0.16, 16), steel.clone(), [x, ROOM.height - 0.42, 2.6], { castShadow: true });
     }
 
     // ── ściana drzwiowa (tynk) i ściana prawa ────────────────────────────────
-    add(new THREE.PlaneGeometry(roomW, ROOM.height), plaster, [
-      (ROOM.xMin + ROOM.xMax) / 2,
-      ROOM.height / 2,
-      0,
-    ]);
-    add(new THREE.PlaneGeometry(ROOM.depth, ROOM.height), plasterSide, [
-      ROOM.xMax,
-      ROOM.height / 2,
-      ROOM.depth / 2,
-    ], { rotationY: -Math.PI / 2 });
+    add(new THREE.PlaneGeometry(roomW, ROOM.height), plaster, [(ROOM.xMin + ROOM.xMax) / 2, ROOM.height / 2, 0]);
+    add(new THREE.PlaneGeometry(ROOM.depth, ROOM.height), plasterSide, [ROOM.xMax, ROOM.height / 2, ROOM.depth / 2], { rotationY: -Math.PI / 2 });
 
-    // czarny słup stalowy (dwuteownik) przy prawej ścianie
+    // czarny słup stalowy (dwuteownik)
     const beamX = ROOM.xMax - 0.16;
     add(new THREE.BoxGeometry(0.1, ROOM.height, 0.24), steel.clone(), [beamX, ROOM.height / 2, 1.35], { castShadow: true });
     for (const dz of [-0.12, 0.12]) {
@@ -167,63 +146,53 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
     const bx = ROOM.xMin;
     const t = ROOM.wallThickness;
     const win = { z0: 1.5, z1: 4.7, y0: 0.85, y1: 2.7 };
-    const brickBox = (
-      lenZ: number,
-      height: number,
-      centerZ: number,
-      centerY: number,
-    ) => {
-      const geometry = new THREE.BoxGeometry(t, height, lenZ);
-      add(geometry, brickMat(lenZ, height), [bx + t / 2, centerY, centerZ], {
-        castShadow: true,
-      });
+    const brickBox = (lenZ: number, height: number, centerZ: number, centerY: number) => {
+      add(new THREE.BoxGeometry(t, height, lenZ), brickMat(lenZ, height), [bx + t / 2, centerY, centerZ], { castShadow: true });
     };
-    brickBox(win.z0, ROOM.height, win.z0 / 2, ROOM.height / 2); // przed oknem
-    brickBox(ROOM.depth - win.z1, ROOM.height, (win.z1 + ROOM.depth) / 2, ROOM.height / 2); // za oknem
-    brickBox(win.z1 - win.z0, win.y0, (win.z0 + win.z1) / 2, win.y0 / 2); // pod oknem
-    brickBox(win.z1 - win.z0, ROOM.height - win.y1, (win.z0 + win.z1) / 2, (win.y1 + ROOM.height) / 2); // nad oknem
+    brickBox(win.z0, ROOM.height, win.z0 / 2, ROOM.height / 2);
+    brickBox(ROOM.depth - win.z1, ROOM.height, (win.z1 + ROOM.depth) / 2, ROOM.height / 2);
+    brickBox(win.z1 - win.z0, win.y0, (win.z0 + win.z1) / 2, win.y0 / 2);
+    brickBox(win.z1 - win.z0, ROOM.height - win.y1, (win.z0 + win.z1) / 2, (win.y1 + ROOM.height) / 2);
 
-    // parapet betonowy
-    add(new THREE.BoxGeometry(t + 0.06, 0.05, win.z1 - win.z0 + 0.08), new THREE.MeshStandardMaterial({ color: '#8d8a84', roughness: 0.85 }), [
-      bx + t / 2 + 0.015,
-      win.y0 - 0.025,
-      (win.z0 + win.z1) / 2,
-    ], { castShadow: true });
+    add(new THREE.BoxGeometry(t + 0.06, 0.05, win.z1 - win.z0 + 0.08), new THREE.MeshStandardMaterial({ color: '#c9c4ba', roughness: 0.8 }), [bx + t / 2 + 0.015, win.y0 - 0.025, (win.z0 + win.z1) / 2], { castShadow: true });
 
     // rama okna + szprosy (czarna stal)
-    const frameD = 0.07;
     const fz = (win.z0 + win.z1) / 2;
     const fy = (win.y0 + win.y1) / 2;
     const winLen = win.z1 - win.z0;
     const winH = win.y1 - win.y0;
-    const frame = (w: number, h: number, y: number, z: number) =>
-      add(new THREE.BoxGeometry(frameD, h, w), steel.clone(), [bx + t - 0.06, y, z], { castShadow: true });
+    const frame = (w: number, h: number, y: number, z: number) => add(new THREE.BoxGeometry(0.07, h, w), steel.clone(), [bx + t - 0.06, y, z], { castShadow: true });
     frame(winLen, 0.06, win.y0 + 0.03, fz);
     frame(winLen, 0.06, win.y1 - 0.03, fz);
     frame(0.06, winH, fy, win.z0 + 0.03);
     frame(0.06, winH, fy, win.z1 - 0.03);
-    for (let i = 1; i <= 3; i++) frame(0.045, winH, fy, win.z0 + (winLen * i) / 4); // pionowe szprosy
-    frame(winLen, 0.045, fy, fz); // poziomy szpros
+    for (let i = 1; i <= 3; i++) frame(0.045, winH, fy, win.z0 + (winLen * i) / 4);
+    frame(winLen, 0.045, fy, fz);
 
-    // "dzienne niebo" za oknem (prześwietlona tafla jak w referencji)
-    add(new THREE.PlaneGeometry(winLen + 0.4, winH + 0.4), daylight, [bx - 0.4, fy, fz], {
-      rotationY: Math.PI / 2,
-      receiveShadow: false,
-    });
+    // prześwietlona tafla dzienna za oknem
+    add(new THREE.PlaneGeometry(winLen + 0.4, winH + 0.4), daylight, [bx - 0.4, fy, fz], { rotationY: Math.PI / 2, receiveShadow: false });
 
     return { group: g, dispose: () => disposables.forEach((d) => d.dispose()) };
-  }, [variant, brickColor, brickBump, brickRough, woodColor, woodBump, woodRough]);
+  }, [variant, brickColor, brickNormal, brickRough, brickAo, mcColor, mcNormal, mcRough, mcAo, woodColor, woodBump, woodRough]);
 
   useEffect(() => () => group.dispose(), [group]);
 
   return (
     <group>
       <primitive object={group.group} />
-      {/* światło dzienne z okna po lewej + miękkie wypełnienie */}
-      <hemisphereLight intensity={1.0} color="#e2dcd2" groundColor="#57534e" />
+
+      {/* Proceduralne środowisko (bez pobierania HDR) - daje metalom i betonowi
+          czym odbijać: jasny "kierunek okna" po lewej + ciemniejsze wnętrze. */}
+      <Environment resolution={256} frames={1}>
+        <color attach="background" args={['#2a2622']} />
+        <Lightformer position={[-6, 2.2, 2.8]} scale={[3, 4, 1]} intensity={3} color="#fff1dc" />
+        <Lightformer position={[5, 3, 3]} scale={[4, 4, 1]} intensity={0.4} color="#8f9298" />
+        <Lightformer position={[0, 4, 0]} scale={[6, 6, 1]} rotation={[Math.PI / 2, 0, 0]} intensity={0.3} color="#6b6660" />
+      </Environment>
+
+      <hemisphereLight intensity={1.15} color="#ece5d8" groundColor="#7c756a" />
       <WindowLight color={variant.sunColor} intensity={variant.sunIntensity} />
-      <directionalLight position={[3.5, 2.4, 5.5]} intensity={0.55} color="#d8d3cc" />
-      <directionalLight position={[-3, 2.8, 6.5]} intensity={0.45} color="#efe3d2" />
+      <directionalLight position={[3.5, 2.4, 5.5]} intensity={0.55} color="#e6e0d6" />
     </group>
   );
 }

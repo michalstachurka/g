@@ -1,24 +1,18 @@
 # Licencje tekstur
 
-## Stan: TYMCZASOWE (do podmiany na CC0)
+## Scena loftowa (aktualne, CC0)
 
-Polityka sieciowa środowiska deweloperskiego blokuje polyhaven.com oraz
-ambientcg.com, więc docelowe zestawy PBR CC0 (kolor + normal GL + roughness
-+ AO, 1K-2K) zostaną pobrane i podmienione po otwarciu dostępu sieciowego.
-Struktura katalogów i loader są już przygotowane pod pełne zestawy.
+### textures/brick/ (color, normal, roughness, ao - 2K JPG)
+- Poly Haven "Brick Wall 006" - https://polyhaven.com/a/brick_wall_006
+- Licencja: CC0 (domena publiczna) - dowolne uzycie komercyjne bez atrybucji
 
-## Obecne pliki
+### textures/microcement/ (color, normal, roughness, ao - 2K JPG)
+- Poly Haven "Brushed Concrete" - https://polyhaven.com/a/brushed_concrete
+- Licencja: CC0 (domena publiczna)
+- Uzyte na podlodze i scianie drzwiowej (mikrocement wg referencji klienta)
 
-### textures/brick/ (color.jpg, bump.jpg, roughness.jpg)
-- Źródło: repozytorium three.js, `examples/textures/brick_*.jpg`
-- https://github.com/mrdoob/three.js/tree/dev/examples
-- Licencja: MIT (© 2010-2026 three.js authors) - użycie komercyjne dozwolone
-- https://github.com/mrdoob/three.js/blob/dev/LICENSE
+## Wariant C - podloga z desek (tymczasowe)
 
-### textures/wood/ (color.jpg, bump.jpg, roughness.jpg)
-- Źródło: repozytorium three.js, `examples/textures/hardwood2_*.jpg`
-- Licencja: MIT, jak wyżej
-
-### Beton
-- Chwilowo bez tekstury (materiał jednolity w kodzie sceny) - docelowo
-  zestaw CC0 z Poly Haven/ambientCG.
+### textures/wood/ (color, bump, roughness)
+- Repozytorium three.js examples/textures/hardwood2_* - licencja MIT
+- Do podmiany na zestaw CC0, jesli wariant C wejdzie do uzycia.
