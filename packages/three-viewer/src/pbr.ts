@@ -36,6 +36,12 @@ export interface PbrMaterialOptions {
   saturation?: number;
   /** Siła mapy AO (mniej = mniej "plam brudu"). */
   aoIntensity?: number;
+  /**
+   * Wielkoskalowe zróżnicowanie jasności albedo (0..~0.2), rozbija powtarzalność
+   * tekstury ("efekt CGI") tanim szumem we fragmencie - bez dodatkowych map.
+   */
+  breakup?: number;
+  envMapIntensity?: number;
 }
 
 /** aoMap wymaga drugiego setu UV - duplikujemy 'uv' jako 'uv1'. */
@@ -89,12 +95,17 @@ export function buildPbrMaterial(
     material.aoMapIntensity = options.aoIntensity ?? 1;
   }
 
-  // Korekta albedo w shaderze (rozjaśnienie + odsycenie) - do "jasnego betonu".
+  if (options.envMapIntensity != null) material.envMapIntensity = options.envMapIntensity;
+
+  // Korekta albedo w shaderze: rozjaśnienie + odsycenie ("jasny beton") oraz
+  // wielkoskalowy breakup rozbijający powtarzalność tekstury.
   const brighten = options.brighten ?? 1;
   const saturation = options.saturation ?? 1;
-  if (brighten !== 1 || saturation !== 1) {
+  const breakup = options.breakup ?? 0;
+  if (brighten !== 1 || saturation !== 1 || breakup !== 0) {
     const b = brighten.toFixed(4);
     const s = saturation.toFixed(4);
+    const k = breakup.toFixed(4);
     material.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
@@ -102,10 +113,18 @@ export function buildPbrMaterial(
         {
           float _luma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
           diffuseColor.rgb = clamp(mix(vec3(_luma), diffuseColor.rgb, ${s}) * ${b}, 0.0, 1.0);
+          #ifdef USE_MAP
+          if (${k} > 0.0) {
+            vec2 _w = vMapUv;
+            float _n = sin(_w.x * 1.7 + _w.y * 0.6) * sin(_w.y * 1.3 - _w.x * 0.4);
+            _n += 0.5 * sin(_w.x * 0.5) * sin(_w.y * 0.7);
+            diffuseColor.rgb *= 1.0 + ${k} * clamp(_n, -1.0, 1.0);
+          }
+          #endif
         }`,
       );
     };
-    material.customProgramCacheKey = () => `pbr-lift-${b}-${s}`;
+    material.customProgramCacheKey = () => `pbr-${b}-${s}-${k}`;
   }
   return material;
 }

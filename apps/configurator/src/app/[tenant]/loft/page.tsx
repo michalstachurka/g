@@ -52,7 +52,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
           // pixel ratio ograniczony do 1.75 (płynność na telefonach)
           dpr={[1, 1.75]}
           camera={{ fov: 46, near: 0.05, far: 60, position: [4.6, 1.6, 4.6] }}
-          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.26 }}
+          gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.32 }}
           onCreated={({ gl }) => {
             gl.shadowMap.type = THREE.PCFSoftShadowMap;
             gl.outputColorSpace = THREE.SRGBColorSpace;

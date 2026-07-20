@@ -30,7 +30,7 @@ import type { LoftVariant } from './loft-variants';
 
 // ── Wymiary (metry) ──────────────────────────────────────────────────────────
 const ROOM = { W: 6.8, H: 3.0, D: 6.0, wall: 0.2, ceil: 0.25, floor: 0.3 };
-const DOOR = { w: 0.9, h: 2.1, x0: 2.5 }; // otwór 90x210, lewy brzeg na x0
+const DOOR = { w: 0.9, h: 2.1, x0: 2.5, niche: 0.26 }; // otwór 90x210 + głębokość wnęki
 const WINDOW = { z0: 1.6, z1: 4.6, y0: 0.9, y1: 2.5 }; // otwór w ścianie ceglanej
 const BEAM = { zs: [1.9, 4.1], h: 0.16, flange: 0.14, web: 0.02, drop: 0.14 }; // 2 belki
 
@@ -78,6 +78,7 @@ interface Slots {
   wall: THREE.Mesh[];
   floor: THREE.Mesh[];
   ceil: THREE.Mesh[];
+  niche: THREE.Mesh[]; // tylna ściana wnęki drzwiowej (ciemniejszy mikrocement)
 }
 
 /** Gradientowe "niebo" za oknem - daje głębię i naturalne światło (nie świeci na biało). */
@@ -87,10 +88,10 @@ function makeSkyTexture(): THREE.Texture {
   c.height = 256;
   const ctx = c.getContext('2d')!;
   const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#cdd8e2');
-  g.addColorStop(0.55, '#dfe4e6');
-  g.addColorStop(0.75, '#e9e4da');
-  g.addColorStop(1, '#d7cdbf');
+  g.addColorStop(0, '#aebfce'); // chłodne niebo u góry (nie biel)
+  g.addColorStop(0.5, '#c6cdd2');
+  g.addColorStop(0.78, '#d3cdc2');
+  g.addColorStop(1, '#c3b8a8'); // cieplejsza mgła przy horyzoncie
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 16, 256);
   const tex = new THREE.CanvasTexture(c);
@@ -126,7 +127,7 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
   const built = useMemo(() => {
     const group = new THREE.Group();
     const dispose: { dispose: () => void }[] = [];
-    const slots: Slots = { brick: [], wall: [], floor: [], ceil: [] };
+    const slots: Slots = { brick: [], wall: [], floor: [], ceil: [], niche: [] };
     const { W, H, D, wall: T, ceil: TC, floor: TF } = ROOM;
 
     const track = <G extends THREE.BufferGeometry>(g: G) => (dispose.push(g), g);
@@ -205,14 +206,18 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
       group.add(m);
       arr.push(m);
     };
-    revealPlane(slots.wall, T, dh, [dx0 + 0.002, dh / 2, -T / 2], [0, Math.PI / 2, 0], WALL_TILE); // lewy glif
-    revealPlane(slots.wall, T, dh, [dx1 - 0.002, dh / 2, -T / 2], [0, -Math.PI / 2, 0], WALL_TILE); // prawy glif
-    revealPlane(slots.wall, dw, T, [dxc, dh - 0.002, -T / 2], [Math.PI / 2, 0, 0], WALL_TILE); // nadproże (spód)
-
-    // subtelny cień kontaktowy w głębi otworu (ciemna płaszczyzna za drzwiami)
-    const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.18 });
-    dispose.push(shadowMat);
-    mesh(box(dw + 0.06, dh + 0.03, 0.005), shadowMat, [dxc, dh / 2, -T - 0.02], undefined, false, false);
+    // WNĘKA drzwiowa: ościeże na pełną głębokość + tylna ściana + podłoga wnęki,
+    // dzięki czemu otwór to czytelna wnęka, nie czarna dziura.
+    const nd = DOOR.niche;
+    revealPlane(slots.wall, nd, dh, [dx0 + 0.002, dh / 2, -nd / 2], [0, Math.PI / 2, 0], WALL_TILE); // lewy glif
+    revealPlane(slots.wall, nd, dh, [dx1 - 0.002, dh / 2, -nd / 2], [0, -Math.PI / 2, 0], WALL_TILE); // prawy glif
+    revealPlane(slots.wall, dw, nd, [dxc, dh - 0.002, -nd / 2], [Math.PI / 2, 0, 0], WALL_TILE); // nadproże (spód)
+    revealPlane(slots.floor, dw, nd, [dxc, 0.004, -nd / 2], [-Math.PI / 2, 0, 0], FLOOR_TILE); // podłoga wnęki
+    // tylna ściana wnęki (ciemniejszy mikrocement - wrażenie korytarza)
+    {
+      const g = planeUv(track(new THREE.PlaneGeometry(dw, dh)), WALL_TILE);
+      slot(slots.niche, g, [dxc, dh / 2, -nd + 0.004]);
+    }
 
     // punkt montażu drzwi - wspólny dla wszystkich wariantów skrzydeł
     const doorMount = new THREE.Group();
@@ -285,11 +290,23 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
       mesh(track(new THREE.CylinderGeometry(0.05, 0.06, 0.11, 16)), steel, [dxc + dx, H - 0.2, 1.4], [Math.PI / 2.6, 0, 0], true, false);
     }
 
-    // ── DEKORACJA: postument + prosta bryła z jasnego kamienia (przy ścianie ceglanej, poza strefą drzwi) ──
-    const decoX = 0.75, decoZ = 5.1;
-    mesh(box(0.34, 0.62, 0.34, 0.015), stone, [decoX, 0.31, decoZ]);
-    mesh(box(0.22, 0.28, 0.22, 0.03), stone, [decoX, 0.62 + 0.15, decoZ], [0.2, 0.5, 0.1]);
-    mesh(track(new THREE.IcosahedronGeometry(0.12, 0)), stone, [decoX, 0.62 + 0.36, decoZ]);
+    // ── REKWIZYTY (2-3, budują skalę i klimat, nie odciągają od drzwi) ──────
+    // 1) Smukły czarny grzejnik loftowy pod oknem (żeberka) - mocny sygnał skali.
+    const radMat = new THREE.MeshStandardMaterial({ color: '#2c2d31', roughness: 0.5, metalness: 0.6, envMapIntensity: 0.7 });
+    dispose.push(radMat);
+    const radZ0 = (WINDOW.z0 + WINDOW.z1) / 2 - 0.7;
+    mesh(box(0.05, 0.52, 1.5, 0.01), radMat, [0.14, 0.44, radZ0 + 0.7]); // korpus
+    for (let i = 0; i < 15; i++) {
+      mesh(box(0.09, 0.48, 0.02, 0.005), radMat, [0.15, 0.44, radZ0 + 0.06 + i * 0.093], undefined, true, false); // żeberka
+    }
+    // 2) Postument z jasnego betonu + subtelna, gładka bryła (rzeźba) - premium, minimal.
+    const decoX = 0.62, decoZ = 5.2;
+    mesh(box(0.32, 0.55, 0.32, 0.012), stone, [decoX, 0.275, decoZ]);
+    mesh(track(new THREE.CapsuleGeometry(0.1, 0.22, 6, 14)), stone, [decoX, 0.72, decoZ], [0, 0, 0.18]);
+    // 3) Gniazdko/detal ścienny na ścianie drzwiowej (skala, dyskretny).
+    const plate = new THREE.MeshStandardMaterial({ color: '#e7e7e4', roughness: 0.6 });
+    dispose.push(plate);
+    mesh(box(0.08, 0.08, 0.006, 0.008), plate, [dx0 - 0.45, 0.32, 0.004]);
 
     return {
       group,
@@ -303,22 +320,32 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
   // ── MATERIAŁY zależne od wariantu (podmiana + zwolnienie poprzednich) ──────
   const prevMats = useRef<THREE.Material[]>([]);
   useEffect(() => {
-    const brickMat = buildPbrMaterial(brickSet, { repeat: [1, 1], tint: variant.brickTint, saturation: 1 });
-    const wallMat = buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.wallTint, brighten: variant.wallBrighten, saturation: 0.12, roughness: 0.88, aoIntensity: 0.5 });
+    // Cegła: breakup rozbija powtarzalność; AO subtelne (postarzana, nie brudna).
+    const brickMat = buildPbrMaterial(brickSet, { repeat: [1, 1], tint: variant.brickTint, saturation: 1, breakup: 0.14, aoIntensity: 0.7, roughness: 0.95 });
+    // Ściana mikrocement: subtelny normal (bumpScale niski przez roughness),
+    // breakup przeciw monotonii; wyższy roughness niż podłoga.
+    const wallMat = buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.wallTint, brighten: variant.wallBrighten, saturation: 0.12, roughness: 0.9, aoIntensity: 0.45, breakup: 0.1 });
     // podłoga ma zapieczone UV w skali FLOOR_TILE; deski gęstsze -> mnożnik repeat
     const woodRepeat = FLOOR_TILE / WOOD_TILE;
     const floorMat =
       variant.floor === 'wood'
-        ? buildPbrMaterial(woodSet, { repeat: [woodRepeat, woodRepeat], tint: variant.floorTint, bumpScale: 0.02, roughness: 0.6 })
-        : buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.floorTint, brighten: variant.floorBrighten, saturation: 0.12, roughness: 0.7, aoIntensity: 0.45 });
-    const ceilMat = buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.ceilingTint, brighten: variant.ceilingBrighten, saturation: 0.1, roughness: 0.95, aoIntensity: 0.4 });
+        ? buildPbrMaterial(woodSet, { repeat: [woodRepeat, woodRepeat], tint: variant.floorTint, bumpScale: 0.02, roughness: 0.55 })
+        : // podłoga: gładsza od ścian + subtelne odbicie env (bez połysku), inna skala/ton
+          buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.floorTint, brighten: variant.floorBrighten, saturation: 0.14, roughness: 0.55, aoIntensity: 0.4, breakup: 0.08, envMapIntensity: 0.55 });
+    const ceilMat = buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.ceilingTint, brighten: variant.ceilingBrighten, saturation: 0.1, roughness: 0.96, aoIntensity: 0.4, breakup: 0.06 });
+    // tylna ściana wnęki: ten sam mikrocement, ciemniejszy + delikatna emisja,
+    // żeby wnęka nigdy nie była czarną dziurą (czyta się jako szary korytarz).
+    const nicheMat = buildPbrMaterial(microSet, { repeat: [1, 1], tint: variant.wallTint, brighten: variant.wallBrighten * 0.85, saturation: 0.12, roughness: 0.92, aoIntensity: 0.5 });
+    nicheMat.emissive = new THREE.Color('#31333a');
+    nicheMat.emissiveIntensity = 0.55;
 
     for (const m of built.slots.brick) m.material = brickMat;
     for (const m of built.slots.wall) m.material = wallMat;
     for (const m of built.slots.floor) m.material = floorMat;
     for (const m of built.slots.ceil) m.material = ceilMat;
+    for (const m of built.slots.niche) m.material = nicheMat;
 
-    const created = [brickMat, wallMat, floorMat, ceilMat];
+    const created = [brickMat, wallMat, floorMat, ceilMat, nicheMat];
     const toDispose = prevMats.current;
     prevMats.current = created;
     // zwolnij materiały poprzedniego wariantu (i ich klony tekstur)
@@ -336,18 +363,19 @@ export function LoftRoom({ variant, texturesBase = '/textures' }: LoftRoomProps)
     <group>
       <primitive object={built.group} />
 
-      {/* Proceduralne środowisko (bez pobierania HDR) - odbicia stali/szyby. */}
+      {/* Proceduralne środowisko (bez pobierania HDR) - miękkie odbicia i wypełnienie. */}
       <Environment resolution={256} frames={1}>
-        <color attach="background" args={['#20242a']} />
-        <Lightformer position={[-6, 2.2, 3]} scale={[3, 4, 1]} intensity={2.4} color="#eef2f6" />
-        <Lightformer position={[6, 3, 3]} scale={[4, 4, 1]} intensity={0.5} color="#9aa0a6" />
-        <Lightformer position={[0, 5, 3]} scale={[8, 4, 1]} rotation={[Math.PI / 2, 0, 0]} intensity={0.4} color="#7a7d80" />
+        <color attach="background" args={['#2a2f36']} />
+        <Lightformer position={[-6, 2.2, 3]} scale={[3.4, 4, 1]} intensity={3.0} color="#f2f5f8" />
+        <Lightformer position={[6, 3, 3]} scale={[4, 4, 1]} intensity={0.7} color="#a6acb2" />
+        <Lightformer position={[0, 5, 3]} scale={[8, 4, 1]} rotation={[Math.PI / 2, 0, 0]} intensity={0.55} color="#8b8e92" />
       </Environment>
 
-      {/* Światło dzienne z okna (jedyne rzucające cień) + wypełnienie bez czerni. */}
-      <hemisphereLight intensity={1.4} color="#eef1f4" groundColor="#8f8d88" />
+      {/* Światło dzienne z okna (jedyne rzucające cień) + miękkie wypełnienie,
+          więcej średnich tonów, brak zlania w czerń. */}
+      <hemisphereLight intensity={1.65} color="#eef1f4" groundColor="#9a9790" />
       <WindowLight color={variant.sunColor} intensity={variant.sunIntensity} />
-      <directionalLight position={[5, 2.6, 5]} intensity={0.5} color="#e7ecf1" />
+      <directionalLight position={[5, 2.6, 5]} intensity={0.65} color="#e7ecf1" />
       {/* subtelne, neutralne reflektory z szyny */}
       <spotLight position={[DOOR.x0 + DOOR.w / 2 - 0.5, ROOM.H - 0.2, 1.4]} target-position={[DOOR.x0, 1.1, 0]} angle={0.6} penumbra={0.8} intensity={6} distance={6} color="#f2f3f5" castShadow={false} />
       <spotLight position={[DOOR.x0 + DOOR.w / 2 + 0.5, ROOM.H - 0.2, 1.4]} target-position={[DOOR.x0 + DOOR.w, 1.1, 0]} angle={0.6} penumbra={0.8} intensity={6} distance={6} color="#f2f3f5" castShadow={false} />
