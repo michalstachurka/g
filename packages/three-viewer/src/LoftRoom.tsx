@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { useFrame, useLoader, useThree } from '@react-three/fiber';
+import { useLoader } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import { buildPbrMaterial, type PbrTextureSet } from './pbr';
 import type { LoftVariant } from './loft-variants';
@@ -17,23 +17,26 @@ import type { LoftVariant } from './loft-variants';
  * W scenie: jedno skrzydło drzwiowe (ukryte), czarna rzeźba GLB na jasnym
  * postumencie, jeden reflektor loftowy, dwie smukłe belki. Bez mebli/roślin.
  *
+ * Kamera obsługiwana jest na stronie (fitCameraToRoom + limity OrbitControls);
+ * scena nie stosuje zanikania ścian - front jest otwarty, więc ściany boczne
+ * nie zasłaniają drzwi i są w pełni nieprzezroczyste.
+ *
  * Geometria budowana raz na wymiary; zmiana wariantu/koloru podmienia wyłącznie
  * materiały (dispose poprzednich). Drzwi mają STAŁY punkt (DOOR_CX) niezależny
- * od szerokości - zmiana szerokości/wysokości nie przesuwa drzwi ani kamery.
+ * od szerokości - zmiana wymiarów nie przesuwa drzwi.
  *
  * ── REGULACJA ────────────────────────────────────────────────────────────────
  *   DOOR_CX            - stały środek drzwi w świecie (doorAnchor),
  *   LOFT_ROOM_DEFAULTS - domyślne wymiary + zakresy suwaków,
+ *   LOFT_STAGE_DEPTH   - głębokość sceny (do limitów kamery na stronie),
  *   STAGE              - grubości przegród i głębokość sceny,
  *   PLINTH             - postument (wymiary + pozycja względem drzwi),
  *   SCULPT_HEIGHT      - docelowa wysokość rzeźby (m),
  *   SCULPT_MATERIAL    - kolor/roughness/metalness rzeźby,
- *   BEAMS              - belki (przekrój, liczba, rozstaw),
+ *   BEAMS              - belki (przekrój, rozstaw),
  *   *_TILE             - skala tekstur (metry na kafel),
  *   światła            - JSX na dole: hemisfera, front (cień), spot na drzwi,
- *                        temperatura per wariant: sunColor/sunIntensity,
- *   WallFade           - płynne zanikanie bocznych ścian zasłaniających drzwi,
- *   CameraClamp        - bezpieczne granice OrbitControls.
+ *                        temperatura per wariant: sunColor/sunIntensity.
  */
 
 // ── Wymiary (metry) ──────────────────────────────────────────────────────────
@@ -41,10 +44,11 @@ export const LOFT_ROOM_DEFAULTS = {
   w: 4.2, h: 2.95, d: 5.2,
   minW: 3.4, maxW: 7.2, minH: 2.5, maxH: 3.4,
 };
+export const LOFT_STAGE_DEPTH = 4.8; // głębokość pomieszczenia (front otwarty)
 const DOOR_CX = LOFT_ROOM_DEFAULTS.w / 2; // stały środek drzwi (doorAnchor.x)
-const STAGE = { wall: 0.2, floorT: 0.15, ceilT: 0.18, depth: 4.7 };
+const STAGE = { wall: 0.2, floorT: 0.15, ceilT: 0.18, depth: LOFT_STAGE_DEPTH };
 const DOOR = { w: 0.9, h: 2.1, niche: 0.26, gap: 0.0035, leafT: 0.045 };
-const BEAMS = { w: 0.135, h: 0.17, zs: [0.34, 0.66] as const }; // zs = ułamki głębokości
+const BEAMS = { w: 0.135, h: 0.17, zs: [0.32, 0.64] as const }; // zs = ułamki głębokości
 const PLINTH = { w: 0.34, d: 0.34, h: 0.88, gap: 0.55, z: 0.52 }; // gap = odstęp od krawędzi drzwi
 const SCULPT_HEIGHT = 0.45; // 40-50 cm
 const SCULPT_MATERIAL = { color: '#08090b', roughness: 0.72, metalness: 0.08 };
@@ -196,48 +200,6 @@ function CeilingSpot({ x, z, ceilingY, headY, aim }: { x: number; z: number; cei
   );
 }
 
-/** Płynne zanikanie bocznej ściany, gdy kamera zbliża się do niej / zachodzi na drzwi. */
-function WallFade({ left, right, roomLeft, roomRight }: { left: THREE.Mesh[]; right: THREE.Mesh[]; roomLeft: number; roomRight: number }) {
-  const camera = useThree((s) => s.camera);
-  useFrame((_, dt) => {
-    const x = camera.position.x;
-    // zanikanie startuje ~0.9 m od ściany; przy bardzo małym dystansie opacity ~0.12
-    const tL = THREE.MathUtils.clamp((x - roomLeft + 0.1) / 1.0, 0, 1);
-    const tR = THREE.MathUtils.clamp((roomRight + 0.1 - x) / 1.0, 0, 1);
-    applyFade(left, THREE.MathUtils.lerp(0.12, 1, tL), dt);
-    applyFade(right, THREE.MathUtils.lerp(0.12, 1, tR), dt);
-  });
-  return null;
-}
-
-function applyFade(meshes: THREE.Mesh[], target: number, dt: number) {
-  for (const m of meshes) {
-    const mat = m.material as THREE.MeshStandardMaterial | undefined;
-    if (!mat) continue;
-    mat.opacity = THREE.MathUtils.damp(mat.opacity, target, 7, dt);
-    mat.depthWrite = mat.opacity > 0.6; // poprawne depthWrite podczas zanikania
-  }
-}
-
-/** Bezpieczne granice kamery: bez wchodzenia pod podłogę/nad sufit/za tylną ścianę. */
-function CameraClamp({ roomLeft, roomRight, h, depth }: { roomLeft: number; roomRight: number; h: number; depth: number }) {
-  const camera = useThree((s) => s.camera);
-  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3 } | null;
-  useFrame(() => {
-    const p = camera.position;
-    p.x = THREE.MathUtils.clamp(p.x, roomLeft - 0.5, roomRight + 0.5);
-    p.y = THREE.MathUtils.clamp(p.y, 0.3, h + 0.5);
-    p.z = THREE.MathUtils.clamp(p.z, 0.25, depth + 3.2);
-    if (controls?.target) {
-      const t = controls.target;
-      t.x = THREE.MathUtils.clamp(t.x, roomLeft + 0.3, roomRight - 0.3);
-      t.y = THREE.MathUtils.clamp(t.y, 0.4, h - 0.25);
-      t.z = THREE.MathUtils.clamp(t.z, -0.2, depth - 0.4);
-    }
-  });
-  return null;
-}
-
 export interface LoftRoomProps {
   variant: LoftVariant;
   texturesBase?: string;
@@ -327,6 +289,7 @@ export function LoftRoom({
 
     // ── PODŁOGA (płyta z grubością; góra = drewno, boki = ciemny beton) ─────
     // Osobne grupy materiałowe BoxGeometry: index 2 (+Y) = drewno, reszta boki.
+    // Płyty (podłoga/sufit) kończą się na przedniej krawędzi ścian (z=depth).
     const floorZc = (depth - T) / 2;
     const floorGeo = box(W, STAGE.floorT, depth + T);
     const floorMesh: THREE.Mesh = new THREE.Mesh(floorGeo, steel);
@@ -335,13 +298,13 @@ export function LoftRoom({
     floorMesh.receiveShadow = true;
     group.add(floorMesh);
 
-    // ── SUFIT (płyta z grubością) ───────────────────────────────────────────
+    // ── SUFIT (płyta z grubością, w obrysie ścian) ──────────────────────────
     const ceilMesh = slot(slots.ceil, projectUv(box(W, STAGE.ceilT, depth + T), new THREE.Vector3(DOOR_CX, 0, floorZc), 0, 2, CEIL_TILE), [DOOR_CX, H + STAGE.ceilT / 2, floorZc]);
     ceilMesh.castShadow = false;
 
-    // ── ŚCIANY BOCZNE (osobne meshe dla zanikania) ─────────────────────────
+    // ── ŚCIANY BOCZNE (osobne meshe, nieprzezroczyste) ─────────────────────
     // Nie rzucają cienia - inaczej boczna ściana kładzie ostry ukośny cień na
-    // całą ścianę drzwiową. Kontakt cień dają postument/rzeźba/drzwi.
+    // ścianę drzwiową. Front jest otwarty, więc nie zasłaniają drzwi.
     const leftWall = mesh(projectUv(box(T, H, depth + T), new THREE.Vector3(0, H / 2, floorZc), 2, 1, BRICK_TILE), steel, [roomLeft - T / 2, H / 2, floorZc], undefined, false, true);
     const rightWall = mesh(projectUv(box(T, H, depth + T), new THREE.Vector3(0, H / 2, floorZc), 2, 1, WALL_TILE), steel, [roomRight + T / 2, H / 2, floorZc], undefined, false, true);
 
@@ -376,7 +339,7 @@ export function LoftRoom({
       slot(slots.niche, g, [dxc, dh / 2, -nd + 0.004]);
     }
 
-    // ── DRZWI UKRYTE: szczelina 3.5 mm + ciemna powierzchnia + profil alu ────
+    // ── DRZWI UKRYTE: szczelina 3.5 mm + ciemna powierzchnia + profil ────────
     mesh(box(0.03, dh, 0.05), slotDark, [dx0 + 0.015, dh / 2, -0.033], undefined, false, false);
     mesh(box(0.03, dh, 0.05), slotDark, [dx1 - 0.015, dh / 2, -0.033], undefined, false, false);
     mesh(box(dw, 0.03, 0.05), slotDark, [dxc, dh - 0.015, -0.033], undefined, false, false);
@@ -422,7 +385,7 @@ export function LoftRoom({
     doorAnchor.position.set(DOOR_CX, 0, 0);
     group.add(doorAnchor);
 
-    // ── BELKI (2, smukłe, przy suficie, od ściany do ściany) ────────────────
+    // ── BELKI (2, smukłe, przy suficie, w obrysie: od ściany do ściany) ─────
     const beamY = H - 0.02 - BEAMS.h / 2;
     for (const zf of BEAMS.zs) {
       const z = zf * depth;
@@ -457,19 +420,17 @@ export function LoftRoom({
       saturation: 0.14, contrast: 0.72, normalScale: 0.55, roughness: 0.87,
       aoIntensity: 0.5, breakup: 0.07,
     });
-    // lewa ściana - cegła (przygaszona), zanikalna
+    // lewa ściana - cegła (przygaszona), nieprzezroczysta
     const brickMat = buildPbrMaterial(brickSet, {
       repeat: [1, 1], tint: variant.brickTint, saturation: 0.9, brighten: variant.brickBrighten,
       contrast: 0.95, normalScale: 0.8, aoIntensity: 0.75, roughness: 0.95, breakup: 0.1,
     });
-    brickMat.transparent = true;
-    // prawa ściana - ciemny beton (nie czerń), zanikalna
+    // prawa ściana - ciemny beton (nie czerń), nieprzezroczysta
     const wallDarkMat = buildPbrMaterial(microSet, {
       repeat: [1, 1], tint: variant.sideTint, brighten: 1.0,
       saturation: 0.12, contrast: 0.6, normalScale: 0.6, roughness: 0.9,
       aoIntensity: 0.5, breakup: 0.06,
     });
-    wallDarkMat.transparent = true;
     // podłoga: góra drewno (odsycone, przyciemnione), boki ciemny beton
     const woodRepeat: [number, number] = [W / WOOD_TILE, (depth + STAGE.wall) / WOOD_TILE];
     const woodMat = buildPbrMaterial(woodSet, {
@@ -530,8 +491,6 @@ export function LoftRoom({
       <primitive object={built.group} />
       <SculptureModel url={`${modelsBase}/czarna_rzezba_abstrakcyjna.glb`} x={plinthX} z={PLINTH.z} topY={PLINTH.h} />
       <CeilingSpot x={spotX} z={BEAMS.zs[0] * depth} ceilingY={H} headY={H - 0.42} aim={spotTarget} />
-      <WallFade left={[built.leftWall]} right={[built.rightWall]} roomLeft={roomLeft} roomRight={roomRight} />
-      <CameraClamp roomLeft={roomLeft} roomRight={roomRight} h={H} depth={depth} />
 
       {/* Przygaszone środowisko (subtelne odbicia na metalu/podłodze). */}
       <Environment resolution={256} frames={1}>
@@ -545,8 +504,8 @@ export function LoftRoom({
       <hemisphereLight intensity={1.55} color="#d3d6da" groundColor="#6c6255" />
       {/* B: miękkie światło od otwartego frontu - jedyne rzucające cień. */}
       <FrontKeyLight color="#f4eee3" intensity={1.65} tx={DOOR_CX} depth={depth} />
-      {/* fill od prawej - prawa ściana nie może być czarną plamą */}
-      <directionalLight position={[roomRight + 1.4, 2.5, depth * 0.55 + 1.2]} intensity={0.55} color="#e9edf1" />
+      {/* fill od prawej - prawa ściana nie może być czarną plamą (bez cienia) */}
+      <directionalLight position={[roomRight + 1.4, 2.5, depth * 0.55 + 1.2]} intensity={0.5} color="#e9edf1" />
       {/* C: reflektor na drzwi - szeroka miękka plama, bez przepalenia, bez cienia. */}
       <SpotOnDoor color={variant.sunColor} intensity={variant.sunIntensity} pos={[spotX, H - 0.42, BEAMS.zs[0] * depth]} target={spotTarget} />
     </group>
