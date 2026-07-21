@@ -1,9 +1,10 @@
 /**
  * Warianty sceny loftowej. Zmiana wariantu podmienia wyłącznie MATERIAŁY
  * (tinty/rozjaśnienia + temperatura światła) - geometria budowana jest raz.
- * Wariant A odtwarza referencyjny render klienta: ciepły greige na ścianie
- * drzwiowej, czerwona cegła po lewej, ciemny beton po prawej, deski, ciemny
- * sufit z czarnymi belkami i ciepłe punktowe światło.
+ *
+ *   A. Loft ciepły    - ciepły mikrocement, przygaszona cegła, naturalne drewno,
+ *   B. Loft jasny     - jasny greige, jaśniejsza podłoga, neutralne światło,
+ *   C. Loft grafitowy - grafitowe ściany, ciemniejsze drewno, jaśniejszy postument.
  */
 
 export type LoftFloorKind = 'concrete' | 'wood';
@@ -12,19 +13,24 @@ export interface LoftVariant {
   key: string;
   name: string;
   description: string;
-  /** Mnożnik koloru cegły (#ffffff = oryginał). */
+  /** Lewa ściana - cegła: tint + rozjaśnienie (przygaszona). */
   brickTint: string;
-  /** Mikrocement na ścianie drzwiowej: tint + rozjaśnienie albedo. */
+  brickBrighten: number;
+  /** Ściana drzwiowa - mikrocement: tint (kolor domyślny) + rozjaśnienie. */
   wallTint: string;
   wallBrighten: number;
+  /** Prawa ściana + boki podłogi - ciemny beton (nie czerń). */
+  sideTint: string;
   floor: LoftFloorKind;
-  /** Podłoga: tint + rozjaśnienie. */
+  /** Podłoga (drewno): tint + rozjaśnienie (odsycone w shaderze). */
   floorTint: string;
   floorBrighten: number;
-  /** Sufit: ciemny tint + rozjaśnienie. */
+  /** Sufit - ciemnoszary beton. */
   ceilingTint: string;
-  ceilingBrighten: number;
-  /** Główne światło punktowe (reflektor). */
+  /** Postument - jasny kamień/trawertyn. */
+  plinthTint: string;
+  plinthBrighten: number;
+  /** Reflektor na drzwi - temperatura + moc. */
   sunColor: string;
   sunIntensity: number;
 }
@@ -33,46 +39,55 @@ export const LOFT_VARIANTS: LoftVariant[] = [
   {
     key: 'a',
     name: 'Loft ciepły',
-    description: 'Referencja: ciepły greige, czerwona cegła, deski, czarne belki, ciepły reflektor.',
+    description: 'Ciepły mikrocement, przygaszona czerwona cegła, naturalna drewniana podłoga, lekko ciepłe światło.',
     brickTint: '#ffffff',
+    brickBrighten: 0.82,
     wallTint: '#b9a795',
-    wallBrighten: 1.35,
+    wallBrighten: 1.4,
+    sideTint: '#242321',
     floor: 'wood',
-    floorTint: '#d8b98f',
+    floorTint: '#b89a76',
     floorBrighten: 1.0,
-    ceilingTint: '#57504b',
-    ceilingBrighten: 1.0,
-    sunColor: '#ffbd85',
-    sunIntensity: 2.4,
+    ceilingTint: '#1d1d1c',
+    plinthTint: '#d9d2c4',
+    plinthBrighten: 1.9,
+    sunColor: '#ffd9b3',
+    sunIntensity: 2.2,
   },
   {
     key: 'b',
     name: 'Loft jasny',
-    description: 'Jaśniejszy, chłodniejszy mikrocement; reszta jak w wariancie A.',
-    brickTint: '#f2e3d3',
-    wallTint: '#d8d3cb',
-    wallBrighten: 1.6,
+    description: 'Jasny greige mikrocement, jaśniejsza podłoga, subtelniejsza cegła, neutralne światło.',
+    brickTint: '#ecdccb',
+    brickBrighten: 0.95,
+    wallTint: '#cfcabf',
+    wallBrighten: 1.65,
+    sideTint: '#2c2b29',
     floor: 'wood',
-    floorTint: '#e0c49e',
-    floorBrighten: 1.05,
-    ceilingTint: '#6a6560',
-    ceilingBrighten: 1.15,
-    sunColor: '#ffd9b0',
-    sunIntensity: 2.3,
+    floorTint: '#c6ab84',
+    floorBrighten: 1.1,
+    ceilingTint: '#232322',
+    plinthTint: '#e0dacd',
+    plinthBrighten: 2.0,
+    sunColor: '#ffe9d6',
+    sunIntensity: 2.0,
   },
   {
     key: 'c',
     name: 'Loft grafitowy',
-    description: 'Ciemny grafitowy mikrocement, mocniejszy nastrój galerii.',
-    brickTint: '#e8d5c4',
-    wallTint: '#8d8781',
-    wallBrighten: 1.05,
+    description: 'Grafitowe ściany, ciemniejsze drewno, przygaszona cegła, jaśniejszy postument, miękka ekspozycja drzwi.',
+    brickTint: '#d8c4b2',
+    brickBrighten: 0.8,
+    wallTint: '#8c8781',
+    wallBrighten: 1.15,
+    sideTint: '#2c2b29',
     floor: 'wood',
-    floorTint: '#c9a97e',
-    floorBrighten: 0.95,
-    ceilingTint: '#4c4642',
-    ceilingBrighten: 0.9,
-    sunColor: '#ffc290',
-    sunIntensity: 2.6,
+    floorTint: '#a5885f',
+    floorBrighten: 0.92,
+    ceilingTint: '#1b1b1a',
+    plinthTint: '#ddd6c9',
+    plinthBrighten: 2.05,
+    sunColor: '#ffdcb8',
+    sunIntensity: 2.4,
   },
 ];
