@@ -1,4 +1,11 @@
-# Licencje tekstur
+# Licencje tekstur i modeli
+
+## Modele 3D
+
+### models/marble_bust_01/ (gltf + bin + tekstury 1K)
+- Poly Haven "Marble Bust 01" - https://polyhaven.com/a/marble_bust_01
+- Licencja: CC0 (domena publiczna) - dowolne uzycie komercyjne bez atrybucji
+- Uzyty jako rzezba w scenie loftowej
 
 ## Scena loftowa (aktualne, CC0)
 
