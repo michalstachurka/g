@@ -7,6 +7,16 @@
 - Licencja: CC0 (domena publiczna) - dowolne uzycie komercyjne bez atrybucji
 - Uzyty jako rzezba w scenie loftowej
 
+### models/potted_plant_04/ (gltf + bin + tekstury 1K)
+- Poly Haven "Potted Plant 04" - https://polyhaven.com/a/potted_plant_04
+- Licencja: CC0 (domena publiczna)
+- Kwiat doniczkowy obok drzwi w scenie loftowej
+
+### models/hanging_industrial_lamp/ (gltf + bin + tekstury 1K)
+- Poly Haven "Hanging Industrial Lamp" - https://polyhaven.com/a/hanging_industrial_lamp
+- Licencja: CC0 (domena publiczna)
+- Loftowa lampa wiszaca obok drzwi w scenie loftowej
+
 ## Scena loftowa (aktualne, CC0)
 
 ### textures/brick/ (color, normal, roughness, ao - 2K JPG)

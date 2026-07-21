@@ -79,10 +79,19 @@ export function buildPbrMaterial(
   options: PbrMaterialOptions,
 ): THREE.MeshStandardMaterial {
   const anisotropy = options.anisotropy ?? 8;
+  const brighten = options.brighten ?? 1;
+  const saturation = options.saturation ?? 1;
+  const breakup = options.breakup ?? 0;
+  const contrast = options.contrast ?? 1;
+  const shaderActive = brighten !== 1 || saturation !== 1 || breakup !== 0 || contrast !== 1;
+  const tint = new THREE.Color(options.tint ?? '#ffffff');
+  // Gdy shader koryguje albedo: tint wchodzi do shadera PO odsyceniu/kontraście
+  // (material.color mnoży się z texelem PRZED tą korektą, więc odsycenie
+  // zjadałoby też wybrany kolor ściany - stąd "nie działa zmiana koloru").
   const material = new THREE.MeshStandardMaterial({
     map: configuredClone(set.color, true, options.repeat, anisotropy),
     roughness: options.roughness ?? 1,
-    color: new THREE.Color(options.tint ?? '#ffffff'),
+    color: shaderActive ? new THREE.Color('#ffffff') : tint,
   });
   if (set.normal) {
     material.normalMap = configuredClone(set.normal, false, options.repeat, anisotropy);
@@ -104,16 +113,17 @@ export function buildPbrMaterial(
   if (options.envMapIntensity != null) material.envMapIntensity = options.envMapIntensity;
 
   // Korekta albedo w shaderze: rozjaśnienie + odsycenie ("jasny beton") oraz
-  // wielkoskalowy breakup rozbijający powtarzalność tekstury.
-  const brighten = options.brighten ?? 1;
-  const saturation = options.saturation ?? 1;
-  const breakup = options.breakup ?? 0;
-  const contrast = options.contrast ?? 1;
-  if (brighten !== 1 || saturation !== 1 || breakup !== 0 || contrast !== 1) {
+  // wielkoskalowy breakup rozbijający powtarzalność tekstury. Tint mnożony
+  // NA KOŃCU (w przestrzeni liniowej), żeby wybrany kolor nie był odsycany.
+  if (shaderActive) {
     const b = brighten.toFixed(4);
     const s = saturation.toFixed(4);
     const k = breakup.toFixed(4);
     const ct = contrast.toFixed(4);
+    const lin = tint.clone().convertSRGBToLinear();
+    const tr = lin.r.toFixed(5);
+    const tg = lin.g.toFixed(5);
+    const tb = lin.b.toFixed(5);
     material.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
@@ -122,6 +132,7 @@ export function buildPbrMaterial(
           float _luma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
           diffuseColor.rgb = clamp(mix(vec3(_luma), diffuseColor.rgb, ${s}) * ${b}, 0.0, 1.0);
           diffuseColor.rgb = clamp((diffuseColor.rgb - 0.5) * ${ct} + 0.5, 0.0, 1.0);
+          diffuseColor.rgb *= vec3(${tr}, ${tg}, ${tb});
           #ifdef USE_MAP
           if (${k} > 0.0) {
             vec2 _w = vMapUv;
@@ -133,7 +144,7 @@ export function buildPbrMaterial(
         }`,
       );
     };
-    material.customProgramCacheKey = () => `pbr-${b}-${s}-${k}-${ct}`;
+    material.customProgramCacheKey = () => `pbr-${b}-${s}-${k}-${ct}-${tr}-${tg}-${tb}`;
   }
   return material;
 }

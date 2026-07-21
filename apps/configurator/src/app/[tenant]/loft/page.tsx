@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, use, useEffect, useMemo, useState } from 'react';
+import { Suspense, use, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import * as THREE from 'three';
@@ -10,41 +10,26 @@ import { LoftRoom, LOFT_VARIANTS, LOFT_ROOM_DEFAULTS } from '@door/three-viewer'
 import { Spinner, cn } from '@door/ui';
 
 /**
- * Podgląd sceny loftowej (tło wizualizacji drzwi). Warianty, presety kamery
- * oraz kolor/szerokość/wysokość ścian przełączane w pasku; swoboda orbity
- * zachowana (CameraBounds w scenie trzyma kamerę we wnętrzu).
+ * Podgląd sceny ekspozycyjnej drzwi (ściana + podłoga + sufit, bez
+ * zamkniętego pomieszczenia). Sterowanie kamerą IDENTYCZNE jak w
+ * standardowym konfiguratorze (DoorScene): swobodna orbita, pan prawym
+ * przyciskiem / dwoma palcami, te same limity dystansu i kąta.
  */
 
 const RD = LOFT_ROOM_DEFAULTS;
 
-interface CameraPresetDef {
-  key: string;
-  label: string;
-  pos: [number, number, number];
-  target: [number, number, number];
-}
-
-// Presety liczone z wymiarów pokoju: kadry po przekątnej (z narożnika
-// tylnego-prawego) pokazują ścianę drzwiową i ceglaną ścianę z oknem.
-function buildPresets(w: number, h: number, d: number): CameraPresetDef[] {
-  const camY = Math.min(1.65, h - 0.6);
-  const dxc = THREE.MathUtils.clamp(w * 0.37, 1.1, w - 0.9 - 1.1) + 0.45; // środek drzwi
-  return [
-    { key: 'salon', label: 'Widok ogólny', pos: [w - 0.55, camY, d - 0.45], target: [w * 0.21, 1.1, d * 0.26] },
-    { key: 'drzwi', label: 'Drzwi + okno', pos: [w - 0.8, camY - 0.1, d - 0.8], target: [w * 0.28, 1.05, 0.7] },
-    { key: 'produkt', label: 'Zbliżenie drzwi', pos: [dxc + 0.3, 1.25, 3.2], target: [dxc, 1.08, 0] },
-  ];
-}
-
-function CameraPreset({ preset }: { preset: CameraPresetDef | undefined }) {
+/** Ustawia kamerę na wprost drzwi; ponawia tylko przy zmianie szerokości ściany. */
+function CameraRig({ w }: { w: number }) {
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as { target: THREE.Vector3; update: () => void } | null;
+  const applied = useRef<number | null>(null);
   useEffect(() => {
-    if (!preset || !controls) return;
-    camera.position.set(...preset.pos);
-    controls.target.set(...preset.target);
+    if (!controls || applied.current === w) return;
+    applied.current = w;
+    camera.position.set(w / 2 + 0.9, 1.5, 3.7);
+    controls.target.set(w / 2, 1.05, 0);
     controls.update();
-  }, [preset, controls, camera]);
+  }, [w, controls, camera]);
   return null;
 }
 
@@ -55,15 +40,12 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
   const [variantKey, setVariantKey] = useState(
     LOFT_VARIANTS.some((v) => v.key === initial) ? initial : 'a',
   );
-  const [preset, setPreset] = useState(1); // domyślnie "Drzwi + okno"
   // wymiary: wartość "live" (suwak w trakcie przeciągania) + zatwierdzona
   // (przebudowa geometrii dopiero po puszczeniu suwaka - bez dławienia GPU)
   const [dims, setDims] = useState({ w: RD.w, h: RD.h });
   const [live, setLive] = useState(dims);
   const [wallColor, setWallColor] = useState<string | null>(null);
   const variant = LOFT_VARIANTS.find((v) => v.key === variantKey) ?? LOFT_VARIANTS[0];
-
-  const presets = useMemo(() => buildPresets(dims.w, dims.h, RD.d), [dims]);
   const commitDims = () => setDims({ ...live });
 
   return (
@@ -87,23 +69,8 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
             {v.key.toUpperCase()}. {v.name}
           </button>
         ))}
-        <span className="mx-1 hidden h-5 w-px bg-[var(--c-border)] sm:block" />
-        {presets.map((p, i) => (
-          <button
-            key={p.key}
-            onClick={() => setPreset(i)}
-            className={cn(
-              'rounded-[var(--radius)] border px-2.5 py-1.5 text-xs transition',
-              preset === i
-                ? 'border-[var(--c-primary)] font-medium'
-                : 'border-[var(--c-border)] text-[var(--c-text-muted)] hover:border-[var(--c-primary)]',
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
       </div>
-      {/* Ściany: kolor + wymiary (przebudowa geometrii po puszczeniu suwaka) */}
+      {/* Ściana: kolor + wymiary (przebudowa geometrii po puszczeniu suwaka) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--c-border)] bg-[var(--c-surface)] px-4 py-2 text-xs">
         <label className="flex items-center gap-1.5">
           <span className="text-[var(--c-text-muted)]">Kolor ścian</span>
@@ -133,7 +100,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
             onKeyUp={commitDims}
             onTouchEnd={commitDims}
             className="w-28 accent-[var(--c-primary)]"
-            aria-label="Szerokość pomieszczenia"
+            aria-label="Szerokość ściany"
           />
           <span className="w-12 tabular-nums">{live.w.toFixed(1)} m</span>
         </label>
@@ -150,7 +117,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
             onKeyUp={commitDims}
             onTouchEnd={commitDims}
             className="w-28 accent-[var(--c-primary)]"
-            aria-label="Wysokość ścian"
+            aria-label="Wysokość ściany"
           />
           <span className="w-12 tabular-nums">{live.h.toFixed(2)} m</span>
         </label>
@@ -160,7 +127,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
           shadows
           // pixel ratio ograniczony (płynność na telefonach)
           dpr={[1, 1.5]}
-          camera={{ fov: 38, near: 0.05, far: 60, position: buildPresets(RD.w, RD.h, RD.d)[1].pos }}
+          camera={{ fov: 38, near: 0.05, far: 60, position: [RD.w / 2 + 0.9, 1.5, 3.7] }}
           gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }}
           onCreated={({ gl }) => {
             gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -174,16 +141,16 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
               wallColor={wallColor ?? undefined}
             />
           </Suspense>
-          <CameraPreset preset={presets[preset]} />
-          {/* Swobodna orbita; CameraBounds w scenie skraca dystans przy
-              ścianach, maxPolarAngle < 90° blokuje wejście pod podłogę. */}
+          <CameraRig w={dims.w} />
+          {/* Sterowanie 1:1 jak w konfiguratorze produktu (DoorScene). */}
           <OrbitControls
             makeDefault
             enablePan
-            minDistance={1.2}
-            maxDistance={7}
-            maxPolarAngle={Math.PI * 0.49}
-            minPolarAngle={Math.PI * 0.14}
+            panSpeed={0.8}
+            minDistance={1.1}
+            maxDistance={8}
+            maxPolarAngle={Math.PI * 0.55}
+            minPolarAngle={Math.PI * 0.2}
           />
         </Canvas>
       </div>

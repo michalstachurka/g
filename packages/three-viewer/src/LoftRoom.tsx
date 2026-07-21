@@ -4,31 +4,32 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { useFrame, useLoader, useThree } from '@react-three/fiber';
+import { useLoader } from '@react-three/fiber';
 import { Environment, Lightformer } from '@react-three/drei';
 import { buildPbrMaterial, type PbrTextureSet } from './pbr';
 import type { LoftVariant } from './loft-variants';
 
 /**
- * Minimalistyczne wnętrze loftowe - tło do prezentacji drzwi.
- * Zamknięta bryła z grubościami, czerwona cegła przy oknie, szary mikrocement
- * na ścianie drzwiowej, DEMONSTRACYJNE drzwi ukryte (szczelina + klamka),
- * pionowy grzejnik loftowy, rzeźba (GLB, CC0). Bez mebli.
+ * Otwarta scena ekspozycyjna drzwi (bez zamkniętego pomieszczenia):
+ * ściana z DEMONSTRACYJNYMI drzwiami ukrytymi + podłoga + sufit. Kamera ma
+ * pełną swobodę jak w standardowym konfiguratorze - nic jej nie ogranicza
+ * poza limitami OrbitControls ustawianymi na stronie.
+ *
+ * Dekoracje (GLB, CC0 Poly Haven): popiersie na postumencie, kwiat doniczkowy
+ * i loftowa lampa wisząca - wszystkie obok drzwi.
  *
  * Geometria budowana raz dla danych wymiarów; zmiana wariantu/koloru podmienia
- * wyłącznie materiały (i zwalnia poprzednie). Kamera nie jest resetowana przy
- * zmianie wariantu, a CameraBounds trzyma ją we wnętrzu pomieszczenia
- * skracając dystans wzdłuż osi patrzenia (obrót działa też przy ścianie).
+ * wyłącznie materiały (i zwalnia poprzednie). Kamera nie jest resetowana.
  *
  * ── REGULACJA ────────────────────────────────────────────────────────────────
- *   props room/wallColor - wymiary pomieszczenia i kolor ścian (UI strony),
- *   LOFT_ROOM_DEFAULTS   - domyślne wymiary + dozwolone zakresy,
- *   THICK                - grubości przegród,
- *   CAMERA_MARGIN        - minimalny odstęp kamery od przegród,
- *   DOOR                 - otwór drzwi (x0 wyliczane z szerokości pokoju),
+ *   props room/wallColor - wymiary ściany i kolor mikrocementu (UI strony),
+ *   LOFT_ROOM_DEFAULTS   - domyślne wymiary + zakresy suwaków,
+ *   STAGE                - głębokość podłogi/sufitu i grubości płyt,
+ *   DOOR                 - otwór drzwi (wyśrodkowany na ścianie),
+ *   DECOR                - odsunięcia rzeźby/kwiatka/lampy od krawędzi drzwi,
  *   *_TILE               - skala (powtarzanie) tekstur w metrach na kafel,
- *   światła              - JSX na dole (WindowLight + hemisphere + fill),
- *                          moc/temperatura dnia per wariant: sunIntensity/sunColor.
+ *   światła              - JSX na dole (KeyLight + hemisphere + fill),
+ *                          moc/temperatura: sunIntensity/sunColor wariantu.
  */
 
 // ── Wymiary (metry) ──────────────────────────────────────────────────────────
@@ -36,12 +37,11 @@ export const LOFT_ROOM_DEFAULTS = {
   w: 5.4, h: 2.95, d: 5.2,
   minW: 4.2, maxW: 7.2, minH: 2.5, maxH: 3.4,
 };
-const THICK = { wall: 0.2, ceil: 0.25, floor: 0.3 };
-const CAMERA_MARGIN = 0.35; // kamera nie zbliża się do przegród bardziej niż to
+const STAGE = { wall: 0.2, floorT: 0.3, ceilT: 0.22, floorD: 3.8, ceilD: 2.9, back: 0.6 };
 const DOOR = { w: 0.9, h: 2.1, niche: 0.26, gap: 0.005, leafT: 0.045 };
+const DECOR = { sculpt: 0.78, plant: 0.62, lamp: 1.05 }; // odstęp od krawędzi otworu
 
 // metry świata na jeden kafel tekstury (mniejsze = drobniejszy wzór)
-const BRICK_TILE = 1.85; // rząd cegły ~7.5 cm
 const WALL_TILE = 1.7; // mikrocement ściana
 const FLOOR_TILE = 2.2; // podłoga - inna skala niż ściana
 const CEIL_TILE = 2.6;
@@ -78,42 +78,11 @@ function planeUv(geo: THREE.BufferGeometry, tile: number) {
 }
 
 interface Slots {
-  brick: THREE.Mesh[];
   wall: THREE.Mesh[];
   floor: THREE.Mesh[];
   ceil: THREE.Mesh[];
   niche: THREE.Mesh[];
   door: THREE.Mesh[];
-}
-
-/** Niebo za oknem: gradient + mocno rozmyty zarys zabudowy przy horyzoncie. */
-function makeSkyTexture(): THREE.Texture {
-  const c = document.createElement('canvas');
-  c.width = 160;
-  c.height = 256;
-  const ctx = c.getContext('2d')!;
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0, '#b7c4d0');
-  g.addColorStop(0.55, '#cdd2d6');
-  g.addColorStop(0.8, '#d8d2c6');
-  g.addColorStop(1, '#c8bfb0');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 160, 256);
-  // rozmyta sylweta budynków/zieleni (tania - jeden przebieg z blur)
-  ctx.filter = 'blur(7px)';
-  ctx.fillStyle = 'rgba(96,102,108,0.55)';
-  const bl: [number, number, number][] = [[4, 168, 26], [34, 150, 22], [58, 176, 30], [92, 158, 24], [118, 170, 34], [146, 162, 18]];
-  for (const [x, y, w] of bl) ctx.fillRect(x, y, w, 256 - y);
-  ctx.fillStyle = 'rgba(88,104,84,0.5)';
-  for (const x of [16, 74, 128]) {
-    ctx.beginPath();
-    ctx.arc(x, 196, 16, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.filter = 'none';
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
 }
 
 /** Miękki radialny cień kontaktowy (blob). */
@@ -144,55 +113,23 @@ function makeEdgeShadowTexture(): THREE.Texture {
   return new THREE.CanvasTexture(c);
 }
 
-/**
- * Trzyma kamerę we wnętrzu BEZ blokowania obrotu: zamiast przycinać pozycję
- * po osiach (co "przypina" kamerę przy ścianie i zamraża orbitę), skraca
- * dystans kamera-target wzdłuż promienia patrzenia do granicy pomieszczenia.
- * Obrót przy ścianie płynnie "dosuwa" kamerę, a odjazd znów ją oddala.
- */
-function CameraBounds({ w, h, d }: { w: number; h: number; d: number }) {
-  const camera = useThree((s) => s.camera);
-  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3 } | null;
-  const dir = useMemo(() => new THREE.Vector3(), []);
-  useFrame(() => {
-    if (!controls?.target) return;
-    const t = controls.target;
-    // target zawsze wyraźnie wewnątrz (mniejszy box niż box kamery)
-    t.x = THREE.MathUtils.clamp(t.x, 0.6, w - 0.6);
-    t.y = THREE.MathUtils.clamp(t.y, 0.35, h - 0.45);
-    t.z = THREE.MathUtils.clamp(t.z, 0.05, d - 0.6);
-    dir.subVectors(camera.position, t);
-    const len = dir.length();
-    if (len < 1e-4) return;
-    dir.divideScalar(len);
-    const m = CAMERA_MARGIN;
-    const lo = [m, 0.35, m];
-    const hi = [w - m, h - 0.15, d - m];
-    const tc = [t.x, t.y, t.z];
-    const dc = [dir.x, dir.y, dir.z];
-    let max = len;
-    for (let a = 0; a < 3; a++) {
-      if (dc[a] > 1e-6) max = Math.min(max, (hi[a] - tc[a]) / dc[a]);
-      else if (dc[a] < -1e-6) max = Math.min(max, (lo[a] - tc[a]) / dc[a]);
-    }
-    camera.position.copy(t).addScaledVector(dir, Math.max(0.35, Math.min(len, max)));
-  });
-  return null;
-}
-
-/** Rzeźba: popiersie z marmuru (Poly Haven "Marble Bust 01", CC0) na postumencie. */
-function SculptureModel({ x, z, url }: { x: number; z: number; url: string }) {
+/** Dekoracja z GLB: skalowana do zadanej wysokości, kotwiczona podstawą lub górą. */
+function GltfDecor({
+  url, x, z, y = 0, height, rotY = 0, anchor = 'floor',
+}: {
+  url: string; x: number; z: number; y?: number; height: number; rotY?: number; anchor?: 'floor' | 'top';
+}) {
   const gltf = useLoader(GLTFLoader, url);
   const obj = useMemo(() => {
     const s = gltf.scene.clone(true);
-    s.rotation.y = -2.3; // twarzą do wnętrza pokoju
-    const bb = new THREE.Box3().setFromObject(s);
+    s.rotation.y = rotY;
+    let bb = new THREE.Box3().setFromObject(s);
     const size = bb.getSize(new THREE.Vector3());
-    const scale = 0.52 / Math.max(size.y, 1e-4);
-    s.scale.setScalar(scale);
-    bb.setFromObject(s);
+    s.scale.setScalar(height / Math.max(size.y, 1e-4));
+    bb = new THREE.Box3().setFromObject(s);
     const c = bb.getCenter(new THREE.Vector3());
-    s.position.set(x - c.x, 0.58 - bb.min.y, z - c.z);
+    const yOff = anchor === 'floor' ? y - bb.min.y : y - bb.max.y;
+    s.position.set(x - c.x, yOff, z - c.z);
     s.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         o.castShadow = true;
@@ -200,7 +137,7 @@ function SculptureModel({ x, z, url }: { x: number; z: number; url: string }) {
       }
     });
     return s;
-  }, [gltf, x, z]);
+  }, [gltf, x, z, y, height, rotY, anchor]);
   return <primitive object={obj} />;
 }
 
@@ -208,7 +145,7 @@ export interface LoftRoomProps {
   variant: LoftVariant;
   texturesBase?: string;
   modelsBase?: string;
-  /** Wymiary pomieszczenia (m); brak pola = wartość z LOFT_ROOM_DEFAULTS. */
+  /** Wymiary ściany (m); brak pola = wartość z LOFT_ROOM_DEFAULTS. */
   room?: { w?: number; h?: number; d?: number };
   /** Nadpisanie koloru ścian z mikrocementu (tint; undefined = kolor wariantu). */
   wallColor?: string;
@@ -223,15 +160,14 @@ export function LoftRoom({
 }: LoftRoomProps) {
   const W = THREE.MathUtils.clamp(room?.w ?? LOFT_ROOM_DEFAULTS.w, LOFT_ROOM_DEFAULTS.minW, LOFT_ROOM_DEFAULTS.maxW);
   const H = THREE.MathUtils.clamp(room?.h ?? LOFT_ROOM_DEFAULTS.h, LOFT_ROOM_DEFAULTS.minH, LOFT_ROOM_DEFAULTS.maxH);
-  const D = room?.d ?? LOFT_ROOM_DEFAULTS.d;
-  const sculptX = W - 0.5;
-  const sculptZ = D - 0.6;
+  // drzwi wyśrodkowane; dekoracje odsunięte od krawędzi otworu
+  const dx0 = (W - DOOR.w) / 2;
+  const dx1 = dx0 + DOOR.w;
+  const sculptX = dx0 - DECOR.sculpt;
+  const plantX = dx1 + DECOR.plant;
+  const lampX = Math.min(dx1 + DECOR.lamp, W - 0.35);
 
   const tex = useLoader(THREE.TextureLoader, [
-    `${texturesBase}/brick/color.jpg`,
-    `${texturesBase}/brick/normal.jpg`,
-    `${texturesBase}/brick/roughness.jpg`,
-    `${texturesBase}/brick/ao.jpg`,
     `${texturesBase}/microcement/color.jpg`,
     `${texturesBase}/microcement/normal.jpg`,
     `${texturesBase}/microcement/roughness.jpg`,
@@ -240,8 +176,7 @@ export function LoftRoom({
     `${texturesBase}/wood/bump.jpg`,
     `${texturesBase}/wood/roughness.jpg`,
   ]);
-  const [bC, bN, bR, bAo, mC, mN, mR, mAo, wC, wB, wR] = tex;
-  const brickSet: PbrTextureSet = { color: bC, normal: bN, roughness: bR, ao: bAo };
+  const [mC, mN, mR, mAo, wC, wB, wR] = tex;
   const microSet: PbrTextureSet = { color: mC, normal: mN, roughness: mR, ao: mAo };
   const woodSet: PbrTextureSet = { color: wC, bump: wB, roughness: wR };
 
@@ -249,19 +184,10 @@ export function LoftRoom({
   const built = useMemo(() => {
     const group = new THREE.Group();
     const dispose: { dispose: () => void }[] = [];
-    const slots: Slots = { brick: [], wall: [], floor: [], ceil: [], niche: [], door: [] };
-    const { wall: T, ceil: TC, floor: TF } = THICK;
-
-    // układ zależny od wymiarów
+    const slots: Slots = { wall: [], floor: [], ceil: [], niche: [], door: [] };
+    const T = STAGE.wall;
     const { w: dw, h: dh, niche: nd, gap, leafT } = DOOR;
-    const dx0 = THREE.MathUtils.clamp(W * 0.37, 1.1, W - dw - 1.1);
-    const dx1 = dx0 + dw;
     const dxc = dx0 + dw / 2;
-    const wz0 = 1.3;
-    const wz1 = Math.min(4.0, D - 1.2);
-    const wy0 = 0.9;
-    const wy1 = Math.min(2.45, H - 0.4);
-    const beamZs = [D * 0.3, D * 0.68];
 
     const track = <G extends THREE.BufferGeometry>(g: G) => (dispose.push(g), g);
     const box = (w: number, h: number, d: number, r = 0) =>
@@ -269,18 +195,10 @@ export function LoftRoom({
 
     // materiały stałe - grafit/antracyt zamiast czerni, współdzielone
     const steel = new THREE.MeshStandardMaterial({ color: '#35383d', roughness: 0.55, metalness: 0.75, envMapIntensity: 0.85 });
-    const radiatorMat = new THREE.MeshStandardMaterial({ color: '#565b62', roughness: 0.6, metalness: 0.35, envMapIntensity: 1.2 });
     const alu = new THREE.MeshStandardMaterial({ color: '#a6abb0', roughness: 0.3, metalness: 0.85, envMapIntensity: 1.1 });
-    const sill = new THREE.MeshStandardMaterial({ color: '#5b5955', roughness: 0.75, metalness: 0.05 });
     const skirt = new THREE.MeshStandardMaterial({ color: '#26272a', roughness: 0.85, metalness: 0.2 });
     // wypełnienie szczeliny drzwiowej: ciemne, ale nie czarne (czytelny obrys)
     const slotDark = new THREE.MeshStandardMaterial({ color: '#17181b', roughness: 0.92, metalness: 0.1 });
-    const shellMat = new THREE.MeshStandardMaterial({ color: '#232427', roughness: 0.95, metalness: 0 });
-    const glass = new THREE.MeshPhysicalMaterial({
-      color: '#dfe6ea', roughness: 0.13, metalness: 0, transparent: true, opacity: 0.26,
-      envMapIntensity: 1.3, clearcoat: 0.4, clearcoatRoughness: 0.2,
-    });
-    const sky = new THREE.MeshBasicMaterial({ map: makeSkyTexture() });
     const stone = new THREE.MeshStandardMaterial({ color: '#d6d1c6', roughness: 0.75, metalness: 0 });
     const stoneNormal = mN.clone();
     stoneNormal.wrapS = stoneNormal.wrapT = THREE.RepeatWrapping;
@@ -290,7 +208,7 @@ export function LoftRoom({
     stone.normalScale.set(0.25, 0.25);
     const blobMat = new THREE.MeshBasicMaterial({ map: makeBlobTexture(), transparent: true, opacity: 0.35, depthWrite: false, color: '#000000' });
     const edgeShadowMat = new THREE.MeshBasicMaterial({ map: makeEdgeShadowTexture(), transparent: true, opacity: 0.22, depthWrite: false, color: '#000000' });
-    dispose.push(steel, radiatorMat, alu, sill, skirt, slotDark, shellMat, glass, sky, sky.map!, stone, stoneNormal, blobMat, blobMat.map!, edgeShadowMat, edgeShadowMat.map!);
+    dispose.push(steel, alu, skirt, slotDark, stone, stoneNormal, blobMat, blobMat.map!, edgeShadowMat, edgeShadowMat.map!);
 
     const mesh = (
       geo: THREE.BufferGeometry, mat: THREE.Material, pos: [number, number, number],
@@ -310,21 +228,22 @@ export function LoftRoom({
       return m;
     };
 
-    // ── SKORUPA ZEWNĘTRZNA: od zewnątrz widać ciemny neutralny monolit,
-    //    nie dekoracyjne tekstury ani backface'y wnętrza. Od środka niewidoczna.
-    mesh(box(W + 1.0, H + 0.9, D + 1.0), shellMat, [W / 2, H / 2 - 0.05, D / 2], undefined, false, false);
+    // ── PODŁOGA i SUFIT (płyty z grubością, wystają przed ścianę) ───────────
+    // Płyty NIE rzucają cienia - światło główne pada znad sufitu i cień
+    // płyty zaciemniałby całą ścianę (scena jest otwarta, nie pomieszczenie).
+    const floorD = STAGE.floorD + STAGE.back;
+    const floorZc = (STAGE.floorD - STAGE.back) / 2;
+    const floorMesh = slot(slots.floor, projectUv(box(W, STAGE.floorT, floorD), new THREE.Vector3(W / 2, 0, floorZc), 0, 2, FLOOR_TILE), [W / 2, -STAGE.floorT / 2, floorZc]);
+    floorMesh.castShadow = false;
+    const ceilD = STAGE.ceilD + STAGE.back;
+    const ceilZc = (STAGE.ceilD - STAGE.back) / 2;
+    const ceilMesh = slot(slots.ceil, projectUv(box(W, STAGE.ceilT, ceilD), new THREE.Vector3(W / 2, 0, ceilZc), 0, 2, CEIL_TILE), [W / 2, H + STAGE.ceilT / 2, ceilZc]);
+    ceilMesh.castShadow = false;
 
-    // ── PODŁOGA i SUFIT (płyty z grubością) ─────────────────────────────────
-    slot(slots.floor, projectUv(box(W, TF, D), new THREE.Vector3(W / 2, 0, D / 2), 0, 2, FLOOR_TILE), [W / 2, -TF / 2, D / 2]);
-    slot(slots.ceil, projectUv(box(W, TC, D), new THREE.Vector3(W / 2, 0, D / 2), 0, 2, CEIL_TILE), [W / 2, H + TC / 2, D / 2]);
-
-    // cienka szczelina cokołowa (12 mm) zamiast grubej listwy
+    // cienka szczelina cokołowa (12 mm) u styku ściany z podłogą
     mesh(box(W, 0.012, 0.008), skirt, [W / 2, 0.006, 0.004], undefined, false, true);
-    mesh(box(0.008, 0.012, D), skirt, [0.004, 0.006, D / 2], undefined, false, true);
-    mesh(box(0.008, 0.012, D), skirt, [W - 0.004, 0.006, D / 2], undefined, false, true);
-    mesh(box(W, 0.012, 0.008), skirt, [W / 2, 0.006, D - 0.004], undefined, false, true);
 
-    // ── ŚCIANA DRZWIOWA (mikrocement, z=0) z otworem ────────────────────────
+    // ── ŚCIANA Z DRZWIAMI (mikrocement, lico z=0) ───────────────────────────
     const wallSeg = (x: number, y: number, w: number, h: number) => {
       slot(slots.wall, projectUv(box(w, h, T), new THREE.Vector3(x, y, 0), 0, 1, WALL_TILE), [x, y, -T / 2]);
     };
@@ -403,94 +322,21 @@ export function LoftRoom({
     doorMount.position.set(dxc, 0, 0);
     group.add(doorMount);
 
-    // ── ŚCIANA PRAWA i TYLNA (mikrocement) ──────────────────────────────────
-    slot(slots.wall, projectUv(box(T, H, D), new THREE.Vector3(W, H / 2, D / 2), 2, 1, WALL_TILE), [W + T / 2, H / 2, D / 2]);
-    slot(slots.wall, projectUv(box(W, H, T), new THREE.Vector3(W / 2, H / 2, D), 0, 1, WALL_TILE), [W / 2, H / 2, D + T / 2]);
-
-    // ── ŚCIANA CEGLANA (x=0) z oknem ────────────────────────────────────────
-    const brickSeg = (z: number, y: number, d: number, h: number) => {
-      slot(slots.brick, projectUv(box(T, h, d), new THREE.Vector3(0, y, z), 2, 1, BRICK_TILE), [-T / 2, y, z]);
-    };
-    brickSeg(wz0 / 2, H / 2, wz0, H);
-    brickSeg((wz1 + D) / 2, H / 2, D - wz1, H);
-    brickSeg((wz0 + wz1) / 2, wy0 / 2, wz1 - wz0, wy0);
-    brickSeg((wz0 + wz1) / 2, (wy1 + H) / 2, wz1 - wz0, H - wy1);
-    // glify okna (cegła, osobne UV płaszczyznowe - bez pionowych rozciągnięć)
-    revealPlane(slots.brick, T, wy1 - wy0, [-T / 2, (wy0 + wy1) / 2, wz0 + 0.002], [0, 0, 0], BRICK_TILE);
-    revealPlane(slots.brick, T, wy1 - wy0, [-T / 2, (wy0 + wy1) / 2, wz1 - 0.002], [0, Math.PI, 0], BRICK_TILE);
-    revealPlane(slots.brick, T, wz1 - wz0, [-T / 2, wy1 - 0.002, (wz0 + wz1) / 2], [Math.PI / 2, Math.PI / 2, 0], BRICK_TILE);
-
-    // parapet: ciemny beton, realna grubość, mały bevel
-    mesh(box(T + 0.1, 0.055, wz1 - wz0 + 0.1, 0.008), sill, [-T / 2 + 0.02, wy0 - 0.028, (wz0 + wz1) / 2]);
-
-    // okno: profile stalowe (grafit, bevel), szyba, niebo
-    const wxc = -0.02;
-    const winW = wz1 - wz0;
-    const winH = wy1 - wy0;
-    const fyc = (wy0 + wy1) / 2;
-    const fzc = (wz0 + wz1) / 2;
-    const prof = (h: number, d: number, y: number, z: number) => mesh(box(0.06, h, d, 0.006), steel, [wxc, y, z]);
-    prof(0.07, winW, wy0 + 0.035, fzc);
-    prof(0.07, winW, wy1 - 0.035, fzc);
-    prof(winH, 0.07, fyc, wz0 + 0.035);
-    prof(winH, 0.07, fyc, wz1 - 0.035);
-    for (let i = 1; i <= 2; i++) prof(winH, 0.05, fyc, wz0 + (winW * i) / 3);
-    prof(0.05, winW, fyc, fzc);
-    mesh(box(0.01, winH, winW), glass, [wxc + 0.03, fyc, fzc], undefined, false, false);
-    mesh(track(new THREE.PlaneGeometry(winW + 1.2, winH + 1.2)), sky, [-1.1, fyc, fzc], [0, Math.PI / 2, 0], false, false);
-
-    // ── BELKI (2, przy suficie, zakończone płytami na ścianach) ─────────────
-    const beamY = H - 0.13;
-    for (const z of beamZs) {
-      const x0b = 0.06;
-      const x1b = W - 0.06;
-      const len = x1b - x0b;
-      const cx = (x0b + x1b) / 2;
-      mesh(box(len, 0.022, 0.13, 0.004), steel, [cx, beamY + 0.075, z]);
-      mesh(box(len, 0.022, 0.13, 0.004), steel, [cx, beamY - 0.075, z]);
-      mesh(box(len, 0.11, 0.02, 0.003), steel, [cx, beamY, z]);
-      for (const px of [0.012, W - 0.012]) {
-        mesh(box(0.024, 0.23, 0.19, 0.005), steel, [px, beamY, z]);
-      }
-    }
-
-    // ── GRZEJNIK PIONOWY (loft) na ścianie ceglanej, obok okna ──────────────
-    // 10 pionowych żeber (InstancedMesh), 10 cm nad podłogą, 2 uchwyty, cień.
-    {
-      const finH = 1.5;
-      const finY = 0.1 + finH / 2;
-      const zStart = wz1 + 0.34; // odcinek cegły między oknem a ścianą tylną
-      const finCount = 9;
-      const step = 0.06; // widoczne prześwity między żebrami (nie "czarna płyta")
-      const finGeo = box(0.055, finH, 0.034, 0.006);
-      const fins = new THREE.InstancedMesh(finGeo, radiatorMat, finCount);
-      fins.castShadow = true;
-      const mm = new THREE.Matrix4();
-      for (let i = 0; i < finCount; i++) {
-        mm.setPosition(0.085, finY, zStart + i * step);
-        fins.setMatrixAt(i, mm);
-      }
-      group.add(fins);
-      const zMid = zStart + ((finCount - 1) * step) / 2;
-      for (const y of [0.45, 1.35]) mesh(box(0.06, 0.03, 0.05, 0.004), radiatorMat, [0.03, y, zMid], undefined, false, false);
-      // miękki cień za grzejnikiem
-      const sh = new THREE.Mesh(track(new THREE.PlaneGeometry(0.62, 1.7)), blobMat);
-      sh.rotation.y = Math.PI / 2;
-      sh.position.set(0.012, finY, zMid);
-      group.add(sh);
-    }
-
-    // ── RZEŹBA: postument (popiersie GLB dochodzi w JSX) ────────────────────
+    // ── DEKORACJE: postument rzeźby + cienie kontaktowe pod modelami GLB ────
     {
       const b = new THREE.Mesh(track(new THREE.PlaneGeometry(0.8, 0.8)), blobMat);
       b.rotation.x = -Math.PI / 2;
-      b.position.set(sculptX, 0.012, sculptZ);
+      b.position.set(sculptX, 0.012, 0.42);
       group.add(b);
-      mesh(box(0.38, 0.58, 0.38, 0.008), stone, [sculptX, 0.29, sculptZ]);
+      mesh(box(0.38, 0.58, 0.38, 0.008), stone, [sculptX, 0.29, 0.42]);
+      const p = new THREE.Mesh(track(new THREE.PlaneGeometry(0.5, 0.5)), blobMat);
+      p.rotation.x = -Math.PI / 2;
+      p.position.set(plantX, 0.012, 0.5);
+      group.add(p);
     }
 
     return { group, slots, dispose: () => dispose.forEach((d) => d.dispose()) };
-  }, [bC, bN, bR, bAo, mC, mN, mR, mAo, wC, wB, wR, W, H, D, sculptX, sculptZ]);
+  }, [mN, W, H, dx0, dx1, sculptX, plantX]);
 
   useEffect(() => () => built.dispose(), [built]);
 
@@ -498,11 +344,6 @@ export function LoftRoom({
   const prevMats = useRef<THREE.Material[]>([]);
   useEffect(() => {
     const wallTint = wallColor ?? variant.wallTint;
-    // cegła: mniej nasycona i ciemniejsza, wyciszony relief
-    const brickMat = buildPbrMaterial(brickSet, {
-      repeat: [1, 1], tint: variant.brickTint, saturation: 0.83, brighten: 0.92,
-      contrast: 0.92, normalScale: 0.8, aoIntensity: 0.7, roughness: 0.95, breakup: 0.12,
-    });
     // mikrocement ściana: widoczna struktura (kontrast/relief), matowy
     const wallMat = buildPbrMaterial(microSet, {
       repeat: [1, 1], tint: wallTint, brighten: variant.wallBrighten,
@@ -528,6 +369,7 @@ export function LoftRoom({
     });
     nicheMat.emissive = new THREE.Color('#31333a');
     nicheMat.emissiveIntensity = 0.55;
+    nicheMat.side = THREE.DoubleSide; // widoczna też zza ściany (otwarta scena)
     // skrzydło drzwi: ton ściany, odrobinę jaśniejsze i mniej matowe -
     // delikatnie inaczej łapie światło, więc obrys drzwi jest czytelny
     const doorMat = buildPbrMaterial(microSet, {
@@ -535,14 +377,13 @@ export function LoftRoom({
       saturation: 0.12, contrast: 0.78, normalScale: 0.8, roughness: 0.78, aoIntensity: 0.4,
     });
 
-    for (const m of built.slots.brick) m.material = brickMat;
     for (const m of built.slots.wall) m.material = wallMat;
     for (const m of built.slots.floor) m.material = floorMat;
     for (const m of built.slots.ceil) m.material = ceilMat;
     for (const m of built.slots.niche) m.material = nicheMat;
     for (const m of built.slots.door) m.material = doorMat;
 
-    const created = [brickMat, wallMat, floorMat, ceilMat, nicheMat, doorMat];
+    const created = [wallMat, floorMat, ceilMat, nicheMat, doorMat];
     const toDispose = prevMats.current;
     prevMats.current = created;
     for (const m of toDispose) {
@@ -551,7 +392,7 @@ export function LoftRoom({
       }
       m.dispose();
     }
-  }, [variant, wallColor, built, brickSet, microSet, woodSet]);
+  }, [variant, wallColor, built, microSet, woodSet]);
 
   useEffect(() => () => { for (const m of prevMats.current) m.dispose(); }, []);
 
@@ -560,8 +401,10 @@ export function LoftRoom({
       {/* tło sceny: nigdy czysta czerń */}
       <color attach="background" args={['#1c1c1d']} />
       <primitive object={built.group} />
-      <SculptureModel x={sculptX} z={sculptZ} url={`${modelsBase}/marble_bust_01/marble_bust_01_1k.gltf`} />
-      <CameraBounds w={W} h={H} d={D} />
+      {/* Dekoracje GLB (CC0, Poly Haven) obok drzwi */}
+      <GltfDecor url={`${modelsBase}/marble_bust_01/marble_bust_01_1k.gltf`} x={sculptX} z={0.42} y={0.58} height={0.52} rotY={0.35} />
+      <GltfDecor url={`${modelsBase}/potted_plant_04/potted_plant_04_1k.gltf`} x={plantX} z={0.45} height={0.52} rotY={-0.4} />
+      <GltfDecor url={`${modelsBase}/hanging_industrial_lamp/hanging_industrial_lamp_1k.gltf`} x={lampX} z={0.55} y={H} height={1.05} anchor="top" />
 
       {/* Neutralne, lekkie środowisko proceduralne (bez pobierania HDR). */}
       <Environment resolution={256} frames={1}>
@@ -571,38 +414,40 @@ export function LoftRoom({
         <Lightformer position={[0, 5, 3]} scale={[8, 4, 1]} rotation={[Math.PI / 2, 0, 0]} intensity={0.5} color="#8b8e92" />
       </Environment>
 
-      {/* 1 światło cieniujące (okno) + hemisfera + 1 słaby fill. */}
-      <hemisphereLight intensity={1.0} color="#eef1f4" groundColor="#a5a29a" />
-      <WindowLight color={variant.sunColor} intensity={variant.sunIntensity} tx={W * 0.55} tz={D * 0.55} />
-      <directionalLight position={[4.5, 2.4, 4.6]} intensity={0.45} color="#e9edf1" />
+      {/* 1 światło cieniujące + hemisfera + fill przedni i tylny
+          (tylny: orbita 360° nie może pokazywać czarnej ściany od tyłu). */}
+      <hemisphereLight intensity={1.15} color="#eef1f4" groundColor="#a5a29a" />
+      <KeyLight color={variant.sunColor} intensity={variant.sunIntensity * 0.85} tx={W / 2} />
+      <directionalLight position={[4.5, 2.2, 4.2]} intensity={0.4} color="#e9edf1" />
+      <directionalLight position={[W / 2 - 1.4, 2.6, -4.5]} intensity={0.55} color="#dfe4e9" />
     </group>
   );
 }
 
-/** Kierunkowe światło "z okna" - jedyne rzucające cień; miękkie (PCFSoft + radius). */
-function WindowLight({ color, intensity, tx, tz }: { color: string; intensity: number; tx: number; tz: number }) {
+/** Główne światło kierunkowe (jedyne rzucające cień); miękkie (PCFSoft + radius). */
+function KeyLight({ color, intensity, tx }: { color: string; intensity: number; tx: number }) {
   const light = useRef<THREE.DirectionalLight>(null);
   useEffect(() => {
     const l = light.current;
     if (!l) return;
-    l.target.position.set(tx, 0.35, tz);
+    l.target.position.set(tx, 0.9, 0);
     l.target.updateMatrixWorld();
-  }, [tx, tz]);
+  }, [tx]);
   return (
     <directionalLight
       ref={light}
-      position={[-6, 3.0, 2.6]}
+      position={[-2.8, 3.6, 4.6]}
       intensity={intensity}
       color={color}
       castShadow
       shadow-mapSize={[2048, 2048]}
       shadow-radius={5}
       shadow-bias={-0.0004}
-      shadow-camera-left={-8}
-      shadow-camera-right={8}
-      shadow-camera-top={6}
+      shadow-camera-left={-6}
+      shadow-camera-right={6}
+      shadow-camera-top={5}
       shadow-camera-bottom={-2}
-      shadow-camera-far={26}
+      shadow-camera-far={24}
     />
   );
 }
