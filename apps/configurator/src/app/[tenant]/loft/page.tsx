@@ -26,8 +26,8 @@ function CameraRig({ w }: { w: number }) {
   useEffect(() => {
     if (!controls || applied.current === w) return;
     applied.current = w;
-    camera.position.set(w / 2 + 0.9, 1.5, 3.7);
-    controls.target.set(w / 2, 1.05, 0);
+    camera.position.set(w / 2 + 0.2, 1.35, 4.6);
+    controls.target.set(w / 2, 1.25, 0);
     controls.update();
   }, [w, controls, camera]);
   return null;
@@ -127,7 +127,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
           shadows
           // pixel ratio ograniczony (płynność na telefonach)
           dpr={[1, 1.5]}
-          camera={{ fov: 38, near: 0.05, far: 60, position: [RD.w / 2 + 0.9, 1.5, 3.7] }}
+          camera={{ fov: 38, near: 0.05, far: 60, position: [RD.w / 2 + 0.2, 1.35, 4.6] }}
           gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }}
           onCreated={({ gl }) => {
             gl.shadowMap.type = THREE.PCFSoftShadowMap;

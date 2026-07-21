@@ -1,6 +1,9 @@
 /**
- * Warianty tła loftowego. Zmiana wariantu podmienia wyłącznie MATERIAŁY
- * (kolor/rozjaśnienie/tekstura podłogi) - geometria bryły budowana jest raz.
+ * Warianty sceny loftowej. Zmiana wariantu podmienia wyłącznie MATERIAŁY
+ * (tinty/rozjaśnienia + temperatura światła) - geometria budowana jest raz.
+ * Wariant A odtwarza referencyjny render klienta: ciepły greige na ścianie
+ * drzwiowej, czerwona cegła po lewej, ciemny beton po prawej, deski, ciemny
+ * sufit z czarnymi belkami i ciepłe punktowe światło.
  */
 
 export type LoftFloorKind = 'concrete' | 'wood';
@@ -15,13 +18,13 @@ export interface LoftVariant {
   wallTint: string;
   wallBrighten: number;
   floor: LoftFloorKind;
-  /** Podłoga: tint + rozjaśnienie (ciemniejsza od ściany). */
+  /** Podłoga: tint + rozjaśnienie. */
   floorTint: string;
   floorBrighten: number;
-  /** Betonowy sufit: ciemnoszary tint + rozjaśnienie. */
+  /** Sufit: ciemny tint + rozjaśnienie. */
   ceilingTint: string;
   ceilingBrighten: number;
-  /** Światło dzienne z okna. */
+  /** Główne światło punktowe (reflektor). */
   sunColor: string;
   sunIntensity: number;
 }
@@ -29,47 +32,47 @@ export interface LoftVariant {
 export const LOFT_VARIANTS: LoftVariant[] = [
   {
     key: 'a',
-    name: 'Czerwona cegła + mikrocement',
-    description: 'Czerwona cegła na ścianie z oknem, szary mikrocement na ścianie drzwiowej, ciemniejsza podłoga, betonowy sufit.',
+    name: 'Loft ciepły',
+    description: 'Referencja: ciepły greige, czerwona cegła, deski, czarne belki, ciepły reflektor.',
     brickTint: '#ffffff',
-    wallTint: '#d9d9d7',
-    wallBrighten: 1.45,
-    floor: 'concrete',
-    floorTint: '#c4c3c0',
-    floorBrighten: 1.6,
-    ceilingTint: '#a3a4a6',
-    ceilingBrighten: 1.8,
-    sunColor: '#fff4e6',
-    sunIntensity: 2.2,
+    wallTint: '#b9a795',
+    wallBrighten: 1.35,
+    floor: 'wood',
+    floorTint: '#d8b98f',
+    floorBrighten: 1.0,
+    ceilingTint: '#57504b',
+    ceilingBrighten: 1.0,
+    sunColor: '#ffbd85',
+    sunIntensity: 2.4,
   },
   {
     key: 'b',
-    name: 'Terakota + jaśniejszy mikrocement',
-    description: 'Przydymiona terakota i jaśniejszy, chłodniejszy mikrocement.',
-    brickTint: '#e6b892',
-    wallTint: '#e6e6e3',
-    wallBrighten: 1.62,
-    floor: 'concrete',
-    floorTint: '#cfcecb',
-    floorBrighten: 1.65,
-    ceilingTint: '#adaeb0',
-    ceilingBrighten: 1.9,
-    sunColor: '#ffefdc',
-    sunIntensity: 2.1,
+    name: 'Loft jasny',
+    description: 'Jaśniejszy, chłodniejszy mikrocement; reszta jak w wariancie A.',
+    brickTint: '#f2e3d3',
+    wallTint: '#d8d3cb',
+    wallBrighten: 1.6,
+    floor: 'wood',
+    floorTint: '#e0c49e',
+    floorBrighten: 1.05,
+    ceilingTint: '#6a6560',
+    ceilingBrighten: 1.15,
+    sunColor: '#ffd9b0',
+    sunIntensity: 2.3,
   },
   {
     key: 'c',
-    name: 'Czerwona cegła + deski',
-    description: 'Cegła jak w wariancie A, podłoga z desek, ściany w mikrocemencie.',
-    brickTint: '#ffffff',
-    wallTint: '#d9d9d7',
-    wallBrighten: 1.45,
+    name: 'Loft grafitowy',
+    description: 'Ciemny grafitowy mikrocement, mocniejszy nastrój galerii.',
+    brickTint: '#e8d5c4',
+    wallTint: '#8d8781',
+    wallBrighten: 1.05,
     floor: 'wood',
-    floorTint: '#e8cba6',
-    floorBrighten: 1,
-    ceilingTint: '#a3a4a6',
-    ceilingBrighten: 1.8,
-    sunColor: '#fff4e6',
-    sunIntensity: 2.2,
+    floorTint: '#c9a97e',
+    floorBrighten: 0.95,
+    ceilingTint: '#4c4642',
+    ceilingBrighten: 0.9,
+    sunColor: '#ffc290',
+    sunIntensity: 2.6,
   },
 ];

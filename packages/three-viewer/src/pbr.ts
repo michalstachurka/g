@@ -46,6 +46,8 @@ export interface PbrMaterialOptions {
   contrast?: number;
   /** Siła normal mapy (1 = pełna; np. 0.5 wycisza relief mikrocementu). */
   normalScale?: number;
+  /** Obrót tekstur o 90° (np. kierunek desek podłogi). */
+  rotate90?: boolean;
 }
 
 /** aoMap wymaga drugiego setu UV - duplikujemy 'uv' jako 'uv1'. */
@@ -63,11 +65,16 @@ function configuredClone(
   srgb: boolean,
   repeat: [number, number],
   anisotropy: number,
+  rotate90 = false,
 ): THREE.Texture {
   const t = texture.clone();
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat[0], repeat[1]);
+  if (rotate90) {
+    t.center.set(0.5, 0.5);
+    t.rotation = Math.PI / 2;
+  }
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.anisotropy = anisotropy;
   t.needsUpdate = true;
@@ -88,25 +95,26 @@ export function buildPbrMaterial(
   // Gdy shader koryguje albedo: tint wchodzi do shadera PO odsyceniu/kontraście
   // (material.color mnoży się z texelem PRZED tą korektą, więc odsycenie
   // zjadałoby też wybrany kolor ściany - stąd "nie działa zmiana koloru").
+  const rot = options.rotate90 ?? false;
   const material = new THREE.MeshStandardMaterial({
-    map: configuredClone(set.color, true, options.repeat, anisotropy),
+    map: configuredClone(set.color, true, options.repeat, anisotropy, rot),
     roughness: options.roughness ?? 1,
     color: shaderActive ? new THREE.Color('#ffffff') : tint,
   });
   if (set.normal) {
-    material.normalMap = configuredClone(set.normal, false, options.repeat, anisotropy);
+    material.normalMap = configuredClone(set.normal, false, options.repeat, anisotropy, rot);
     const ns = options.normalScale ?? 1;
     material.normalScale.set(ns, ns);
   }
   if (set.bump) {
-    material.bumpMap = configuredClone(set.bump, false, options.repeat, anisotropy);
+    material.bumpMap = configuredClone(set.bump, false, options.repeat, anisotropy, rot);
     material.bumpScale = options.bumpScale ?? 0.03;
   }
   if (set.roughness) {
-    material.roughnessMap = configuredClone(set.roughness, false, options.repeat, anisotropy);
+    material.roughnessMap = configuredClone(set.roughness, false, options.repeat, anisotropy, rot);
   }
   if (set.ao) {
-    material.aoMap = configuredClone(set.ao, false, options.repeat, anisotropy);
+    material.aoMap = configuredClone(set.ao, false, options.repeat, anisotropy, rot);
     material.aoMapIntensity = options.aoIntensity ?? 1;
   }
 
