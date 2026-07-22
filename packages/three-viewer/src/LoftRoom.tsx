@@ -501,7 +501,7 @@ export function LoftRoom({
     const woodRepeat: [number, number] = [W / WOOD_TILE, (depth + STAGE.wall) / WOOD_TILE];
     const woodMat = buildPbrMaterial(woodSet, {
       repeat: woodRepeat, tint: variant.floorTint, brighten: variant.floorBrighten,
-      saturation: 0.55, contrast: 0.9, bumpScale: 0.018, roughness: 0.72, envMapIntensity: 0.3, rotate90: true,
+      saturation: 0.7, contrast: 0.92, bumpScale: 0.02, roughness: 0.68, envMapIntensity: 0.45, rotate90: true,
     });
     const floorSideMat = new THREE.MeshStandardMaterial({ color: variant.sideTint, roughness: 0.9, metalness: 0 });
     const floorMats = [floorSideMat, floorSideMat, woodMat, floorSideMat, floorSideMat, floorSideMat];

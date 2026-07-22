@@ -97,7 +97,7 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
         <Link href={`/${tenant}`} className="shrink-0 text-xs text-[var(--c-text-muted)] hover:underline">
           ← Katalog
         </Link>
-        <div className="flex flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible">
           {LOFT_VARIANTS.map((v) => (
             <button
               key={v.key}
@@ -134,13 +134,13 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
             className={cn(
               'shrink-0 rounded-[var(--radius)] border px-3 py-1.5 text-sm transition',
               !lampOn
-                ? 'cursor-not-allowed border-[var(--c-border)] text-[var(--c-border)]'
+                ? 'cursor-not-allowed border-[var(--c-border)] text-[var(--c-text-muted)] opacity-40'
                 : lampSteer
-                  ? 'border-[var(--c-primary)] font-medium'
+                  ? 'border-[var(--c-primary)] bg-[color-mix(in_srgb,var(--c-primary)_8%,white)] font-medium'
                   : 'border-[var(--c-border)] text-[var(--c-text-muted)] hover:border-[var(--c-primary)]',
             )}
           >
-            Kieruj lampą
+            {lampSteer ? '✔ Kieruj lampą' : 'Kieruj lampą'}
           </button>
         </div>
         {/* Toggle ustawień pomieszczenia - tylko mobile */}
