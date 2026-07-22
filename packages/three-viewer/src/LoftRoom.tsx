@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { useLoader } from '@react-three/fiber';
-import { Environment, Lightformer } from '@react-three/drei';
+import { useFrame, useLoader } from '@react-three/fiber';
+import { Environment, Lightformer, TransformControls } from '@react-three/drei';
 import { buildPbrMaterial, type PbrTextureSet } from './pbr';
 import type { LoftVariant } from './loft-variants';
 
@@ -47,7 +47,7 @@ export const LOFT_ROOM_DEFAULTS = {
 export const LOFT_STAGE_DEPTH = 4.8; // głębokość pomieszczenia (front otwarty)
 const DOOR_CX = LOFT_ROOM_DEFAULTS.w / 2; // stały środek drzwi (doorAnchor.x)
 const STAGE = { wall: 0.2, floorT: 0.15, ceilT: 0.18, depth: LOFT_STAGE_DEPTH };
-const DOOR = { w: 0.9, h: 2.1, niche: 0.26, gap: 0.0035, leafT: 0.045 };
+const DOOR = { w: 0.9, h: 2.1, niche: 0.2, gap: 0.0035, leafT: 0.045 }; // niche = grubość ściany (otwór na wylot)
 const BEAMS = { w: 0.135, h: 0.17, zs: [0.32, 0.64] as const }; // zs = ułamki głębokości
 const PLINTH = { w: 0.34, d: 0.34, h: 0.88, gap: 0.55, z: 0.52 }; // gap = odstęp od krawędzi drzwi
 const SCULPT_HEIGHT = 0.45; // 40-50 cm
@@ -160,12 +160,29 @@ function SculptureModel({ url, x, z, topY }: { url: string; x: number; z: number
   return <primitive object={object} />;
 }
 
-/** Prosty reflektor loftowy: matowa czarna oprawa na pręcie od sufitu, celuje w drzwi. */
-function CeilingSpot({ x, z, ceilingY, headY, aim }: { x: number; z: number; ceilingY: number; headY: number; aim: [number, number, number] }) {
+/**
+ * Reflektor loftowy: matowa czarna oprawa na pręcie od sufitu + światło,
+ * które można ZAPALIĆ/ZGASIĆ i którym można STEROWAĆ. Gdy włączony tryb
+ * sterowania, przy celu światła pojawia się strzałka (gizmo) - po złapaniu
+ * przeciągamy ją i reflektor obraca się za nią. Oprawa celuje w cel na żywo.
+ */
+function LampRig({
+  headPos, ceilingY, on, steer, color, intensity, aim, onAim,
+}: {
+  headPos: [number, number, number];
+  ceilingY: number;
+  on: boolean;
+  steer: boolean;
+  color: string;
+  intensity: number;
+  aim: [number, number, number];
+  onAim: (v: [number, number, number]) => void;
+}) {
   const head = useRef<THREE.Group>(null);
-  useEffect(() => {
-    head.current?.lookAt(new THREE.Vector3(...aim));
-  }, [aim]);
+  const spot = useRef<THREE.SpotLight>(null);
+  const [target, setTarget] = useState<THREE.Group | null>(null);
+  const [hx, hy, hz] = headPos;
+
   const black = useMemo(
     () => new THREE.MeshStandardMaterial({ color: '#141414', roughness: 0.5, metalness: 0.72, envMapIntensity: 0.7 }),
     [],
@@ -173,30 +190,70 @@ function CeilingSpot({ x, z, ceilingY, headY, aim }: { x: number; z: number; cei
   const lens = useMemo(() => {
     const m = new THREE.MeshStandardMaterial({ color: '#1b1a19', roughness: 0.35, metalness: 0.2 });
     m.emissive = new THREE.Color('#ffdaa8');
-    m.emissiveIntensity = 2.2;
     return m;
   }, []);
   useEffect(() => () => { black.dispose(); lens.dispose(); }, [black, lens]);
+  lens.emissiveIntensity = on ? 2.6 : 0; // soczewka świeci gdy zapalona
+
+  useFrame(() => {
+    if (target && head.current) head.current.lookAt(target.position);
+    if (target && spot.current) spot.current.target = target;
+  });
+
   return (
-    <group position={[x, 0, z]}>
-      <mesh material={black} position={[0, ceilingY - 0.01, 0]} castShadow>
-        <cylinderGeometry args={[0.032, 0.032, 0.02, 18]} />
-      </mesh>
-      <mesh material={black} position={[0, (ceilingY + headY) / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.01, 0.01, Math.max(ceilingY - headY, 0.05), 10]} />
-      </mesh>
-      <group ref={head} position={[0, headY, 0]}>
-        <mesh material={black} position={[0, 0, -0.018]} castShadow>
-          <boxGeometry args={[0.03, 0.046, 0.046]} />
+    <>
+      <group position={[hx, 0, hz]}>
+        <mesh material={black} position={[0, ceilingY - 0.01, 0]} castShadow>
+          <cylinderGeometry args={[0.032, 0.032, 0.02, 18]} />
         </mesh>
-        <mesh material={black} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.05]} castShadow>
-          <cylinderGeometry args={[0.07, 0.056, 0.17, 22]} />
+        <mesh material={black} position={[0, (ceilingY + hy) / 2, 0]} castShadow>
+          <cylinderGeometry args={[0.01, 0.01, Math.max(ceilingY - hy, 0.05), 10]} />
         </mesh>
-        <mesh material={lens} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.132]}>
-          <cylinderGeometry args={[0.056, 0.056, 0.006, 22]} />
-        </mesh>
+        <group ref={head} position={[0, hy, 0]}>
+          <mesh material={black} position={[0, 0, -0.018]} castShadow>
+            <boxGeometry args={[0.03, 0.046, 0.046]} />
+          </mesh>
+          <mesh material={black} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.05]} castShadow>
+            <cylinderGeometry args={[0.07, 0.056, 0.17, 22]} />
+          </mesh>
+          <mesh material={lens} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.132]}>
+            <cylinderGeometry args={[0.056, 0.056, 0.006, 22]} />
+          </mesh>
+        </group>
       </group>
-    </group>
+
+      {/* ruchomy cel światła */}
+      <group ref={setTarget} position={aim} />
+      <spotLight
+        ref={spot}
+        position={headPos}
+        color={color}
+        intensity={on ? intensity : 0}
+        angle={0.6}
+        penumbra={0.95}
+        decay={1.3}
+        distance={0}
+      />
+
+      {/* znacznik celu + strzałka do sterowania (widoczne w trybie sterowania) */}
+      {on && steer && target && (
+        <>
+          <mesh position={aim}>
+            <sphereGeometry args={[0.05, 16, 16]} />
+            <meshBasicMaterial color="#ffcf87" toneMapped={false} />
+          </mesh>
+          <TransformControls
+            object={target}
+            mode="translate"
+            size={0.8}
+            onObjectChange={() => {
+              const p = target.position;
+              onAim([p.x, p.y, p.z]);
+            }}
+          />
+        </>
+      )}
+    </>
   );
 }
 
@@ -208,6 +265,14 @@ export interface LoftRoomProps {
   room?: { w?: number; h?: number; d?: number };
   /** Nadpisanie koloru ściany drzwiowej z mikrocementu (tint; undefined = kolor wariantu). */
   wallColor?: string;
+  /** Lampa (reflektor) zapalona. */
+  lampOn?: boolean;
+  /** Tryb sterowania kierunkiem lampy - pokazuje strzałkę-gizmo do złapania. */
+  lampSteer?: boolean;
+  /** Punkt, w który celuje lampa (świat). */
+  lampAim?: [number, number, number];
+  /** Zmiana celu lampy z przeciągania strzałki. */
+  onLampAimChange?: (v: [number, number, number]) => void;
 }
 
 export function LoftRoom({
@@ -216,6 +281,10 @@ export function LoftRoom({
   modelsBase = '/models',
   room,
   wallColor,
+  lampOn = true,
+  lampSteer = false,
+  lampAim,
+  onLampAimChange,
 }: LoftRoomProps) {
   const W = THREE.MathUtils.clamp(room?.w ?? LOFT_ROOM_DEFAULTS.w, LOFT_ROOM_DEFAULTS.minW, LOFT_ROOM_DEFAULTS.maxW);
   const H = THREE.MathUtils.clamp(room?.h ?? LOFT_ROOM_DEFAULTS.h, LOFT_ROOM_DEFAULTS.minH, LOFT_ROOM_DEFAULTS.maxH);
@@ -329,15 +398,12 @@ export function LoftRoom({
       group.add(m);
       arr.push(m);
     };
-    // wnęka drzwiowa (glify + nadproże + podłoga wnęki + tylna ścianka)
+    // ościeża drzwiowe (glify + nadproże + podłoga otworu) - otwór na wylot,
+    // bez tylnej ścianki, żeby drzwi były widoczne także od tyłu.
     revealPlane(slots.wall, nd, dh, [dx0 + 0.002, dh / 2, -nd / 2], [0, Math.PI / 2, 0], WALL_TILE);
     revealPlane(slots.wall, nd, dh, [dx1 - 0.002, dh / 2, -nd / 2], [0, -Math.PI / 2, 0], WALL_TILE);
     revealPlane(slots.wall, dw, nd, [dxc, dh - 0.002, -nd / 2], [Math.PI / 2, 0, 0], WALL_TILE);
     revealPlane(slots.niche, dw, nd, [dxc, 0.004, -nd / 2], [-Math.PI / 2, 0, 0], WALL_TILE);
-    {
-      const g = planeUv(track(new THREE.PlaneGeometry(dw, dh)), WALL_TILE);
-      slot(slots.niche, g, [dxc, dh / 2, -nd + 0.004]);
-    }
 
     // ── DRZWI UKRYTE: szczelina 3.5 mm + ciemna powierzchnia + profil ────────
     mesh(box(0.03, dh, 0.05), slotDark, [dx0 + 0.015, dh / 2, -0.033], undefined, false, false);
@@ -435,7 +501,7 @@ export function LoftRoom({
     const woodRepeat: [number, number] = [W / WOOD_TILE, (depth + STAGE.wall) / WOOD_TILE];
     const woodMat = buildPbrMaterial(woodSet, {
       repeat: woodRepeat, tint: variant.floorTint, brighten: variant.floorBrighten,
-      saturation: 0.78, bumpScale: 0.015, roughness: 0.76, envMapIntensity: 0.35, rotate90: true,
+      saturation: 0.55, contrast: 0.9, bumpScale: 0.018, roughness: 0.72, envMapIntensity: 0.3, rotate90: true,
     });
     const floorSideMat = new THREE.MeshStandardMaterial({ color: variant.sideTint, roughness: 0.9, metalness: 0 });
     const floorMats = [floorSideMat, floorSideMat, woodMat, floorSideMat, floorSideMat, floorSideMat];
@@ -459,6 +525,9 @@ export function LoftRoom({
       repeat: [1.7, 1.7], tint: variant.plinthTint, brighten: variant.plinthBrighten,
       saturation: 0.18, contrast: 0.7, normalScale: 0.35, roughness: 0.82, aoIntensity: 0.5,
     });
+    // ościeża i skrzydło widoczne też od tyłu (kamera może obejść drzwi)
+    wallMat.side = THREE.DoubleSide;
+    nicheMat.side = THREE.DoubleSide;
 
     for (const m of built.slots.wall) m.material = wallMat;
     for (const m of built.slots.ceil) m.material = ceilMat;
@@ -482,7 +551,8 @@ export function LoftRoom({
 
   useEffect(() => () => { for (const m of prevMats.current) m.dispose(); }, []);
 
-  const spotTarget: [number, number, number] = [dx1 - 0.1, 1.15, 0]; // plama na prawej części drzwi/klamce
+  const defaultAim: [number, number, number] = [dx1 - 0.1, 1.15, 0]; // domyślnie na prawą część drzwi/klamkę
+  const aim = lampAim ?? defaultAim;
 
   return (
     <group>
@@ -490,7 +560,16 @@ export function LoftRoom({
       <color attach="background" args={['#151515']} />
       <primitive object={built.group} />
       <SculptureModel url={`${modelsBase}/czarna_rzezba_abstrakcyjna.glb`} x={plinthX} z={PLINTH.z} topY={PLINTH.h} />
-      <CeilingSpot x={spotX} z={BEAMS.zs[0] * depth} ceilingY={H} headY={H - 0.42} aim={spotTarget} />
+      <LampRig
+        headPos={[spotX, H - 0.42, BEAMS.zs[0] * depth]}
+        ceilingY={H}
+        on={lampOn}
+        steer={lampSteer}
+        color={variant.sunColor}
+        intensity={variant.sunIntensity}
+        aim={aim}
+        onAim={onLampAimChange ?? (() => {})}
+      />
 
       {/* Przygaszone środowisko (subtelne odbicia na metalu/podłodze). */}
       <Environment resolution={256} frames={1}>
@@ -506,8 +585,9 @@ export function LoftRoom({
       <FrontKeyLight color="#f4eee3" intensity={1.65} tx={DOOR_CX} depth={depth} />
       {/* fill od prawej - prawa ściana nie może być czarną plamą (bez cienia) */}
       <directionalLight position={[roomRight + 1.4, 2.5, depth * 0.55 + 1.2]} intensity={0.5} color="#e9edf1" />
-      {/* C: reflektor na drzwi - szeroka miękka plama, bez przepalenia, bez cienia. */}
-      <SpotOnDoor color={variant.sunColor} intensity={variant.sunIntensity} pos={[spotX, H - 0.42, BEAMS.zs[0] * depth]} target={spotTarget} />
+      {/* fill od tyłu - tył ściany drzwiowej czytelny, gdy kamera obchodzi drzwi */}
+      <directionalLight position={[DOOR_CX, 1.7, -3]} intensity={1.05} color="#e4e2dc" />
+      {/* C (reflektor na drzwi) obsługuje LampRig wyżej - zapalanie + sterowanie. */}
     </group>
   );
 }
@@ -540,26 +620,3 @@ function FrontKeyLight({ color, intensity, tx, depth }: { color: string; intensi
   );
 }
 
-/** Reflektor kierowany na drzwi - miękka plama, wysoka penumbra, bez cienia. */
-function SpotOnDoor({ color, intensity, pos, target }: { color: string; intensity: number; pos: [number, number, number]; target: [number, number, number] }) {
-  const t = useMemo(() => new THREE.Object3D(), []);
-  useEffect(() => {
-    t.position.set(...target);
-    t.updateMatrixWorld();
-  }, [t, target]);
-  return (
-    <>
-      <primitive object={t} />
-      <spotLight
-        position={pos}
-        target={t}
-        color={color}
-        intensity={intensity}
-        angle={0.6}
-        penumbra={0.95}
-        decay={1.3}
-        distance={0}
-      />
-    </>
-  );
-}

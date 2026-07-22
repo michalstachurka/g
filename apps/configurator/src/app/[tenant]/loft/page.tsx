@@ -4,7 +4,7 @@ import { Suspense, use, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import * as THREE from 'three';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { LoftRoom, LOFT_VARIANTS, LOFT_ROOM_DEFAULTS, LOFT_STAGE_DEPTH } from '@door/three-viewer';
 import { Spinner, cn } from '@door/ui';
@@ -20,15 +20,14 @@ const RD = LOFT_ROOM_DEFAULTS;
 const DOOR_CX = RD.w / 2; // stały środek drzwi (jak w LoftRoom)
 
 /**
- * Kontroler kamery: near/far, dopasowanie do pomieszczenia (fit), oraz miękkie
- * granice (bez wejścia pod podłogę / za tylną ścianę / w bok ściany).
+ * Kontroler kamery: near/far + jednorazowe dopasowanie kadru (start / "Widok
+ * ogólny"). BEZ ograniczeń ruchu - pełna dowolność obracania, przesuwania i
+ * przybliżania (można obejść pomieszczenie dookoła i zajrzeć za drzwi).
  */
 function CameraController({ w, h, doorX, fitSignal }: { w: number; h: number; doorX: number; fitSignal: number }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const controls = useThree((s) => s.controls) as { target: THREE.Vector3; update: () => void } | null;
   const size = useThree((s) => s.size);
-  const roomLeft = doorX - w / 2;
-  const roomRight = doorX + w / 2;
   const depth = LOFT_STAGE_DEPTH;
 
   useEffect(() => {
@@ -37,10 +36,9 @@ function CameraController({ w, h, doorX, fitSignal }: { w: number; h: number; do
     camera.updateProjectionMatrix();
   }, [camera]);
 
-  // Ustawienie kamery. Start: kadr na drzwi (raz, gdy controls gotowe -
-  // OrbitControls rejestruje się asynchronicznie). Przycisk "Widok ogólny"
-  // (fitSignal > 0): pełne pomieszczenie. NIE wołane przy zmianie
-  // wariantu/koloru/wymiarów.
+  // Start: kadr na drzwi (raz, gdy controls gotowe - rejestrują się
+  // asynchronicznie). Przycisk "Widok ogólny" (fitSignal > 0): pełny pokój.
+  // NIE wołane przy zmianie wariantu/koloru/wymiarów.
   const didStart = useRef(false);
   useEffect(() => {
     if (!controls) return;
@@ -53,12 +51,6 @@ function CameraController({ w, h, doorX, fitSignal }: { w: number; h: number; do
     const distanceForHeight = h / (2 * Math.tan(vFov / 2));
     const horizontalFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const distanceForWidth = w / (2 * Math.tan(horizontalFov / 2));
-
-    // Start (fitSignal 0): kadr na drzwi - dystans z WYSOKOŚCI (na mobile
-    // dopasowanie do szerokości cofa kamerę zbyt daleko). "Widok ogólny":
-    // pełny pokój - dystans z max(wys, szer). Zawsze tuż ZA frontem - wtedy
-    // boczna ściana jest skrócona perspektywicznie do fragmentu (nie biegnie
-    // obok kamery i nie dominuje kadru). Odsunięcie w prawo ograniczone (mobile).
     const base = fitSignal === 0 ? distanceForHeight : Math.max(distanceForHeight, distanceForWidth);
     const margin = fitSignal === 0 ? 1.05 : 1.2;
     const distance = Math.max(base * margin, depth + 0.2);
@@ -70,21 +62,6 @@ function CameraController({ w, h, doorX, fitSignal }: { w: number; h: number; do
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitSignal, controls]);
 
-  // miękkie granice (nie zabierają swobody, tylko blokują wejście w geometrię)
-  useFrame(() => {
-    const p = camera.position;
-    // wysokość: nie pod podłogę i nie nad sufit (brak widoku na dach)
-    p.y = THREE.MathUtils.clamp(p.y, 0.3, h - 0.05);
-    if (p.z < 0.3) p.z = 0.3; // nie za tylną ścianę
-    // gdy kamera jest w głębi pomieszczenia, trzymaj ją między ścianami bocznymi
-    if (p.z < depth) p.x = THREE.MathUtils.clamp(p.x, roomLeft + 0.15, roomRight - 0.15);
-    if (controls?.target) {
-      const t = controls.target;
-      t.x = THREE.MathUtils.clamp(t.x, roomLeft + 0.3, roomRight - 0.3);
-      t.y = THREE.MathUtils.clamp(t.y, 0.4, h - 0.2);
-      t.z = THREE.MathUtils.clamp(t.z, -0.3, depth - 0.3);
-    }
-  });
   return null;
 }
 
@@ -101,17 +78,16 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
   const [wallColor, setWallColor] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false); // panel ustawień (mobile)
   const [fitSignal, setFitSignal] = useState(0); // "Widok ogólny" / start
+  const [lampOn, setLampOn] = useState(true); // reflektor zapalony
+  const [lampSteer, setLampSteer] = useState(false); // tryb sterowania kierunkiem (strzałka)
+  const [lampAim, setLampAim] = useState<[number, number, number] | undefined>(undefined);
   const variant = LOFT_VARIANTS.find((v) => v.key === variantKey) ?? LOFT_VARIANTS[0];
   const commitDims = () => setDims({ ...live });
 
-  // dynamiczne limity dystansu z rozmiaru pomieszczenia (aktualizowane, ale
-  // NIE resetują pozycji kamery)
-  const { minDistance, maxDistance } = useMemo(() => {
+  // szeroki zakres zoomu - pełna dowolność (blisko detalu i daleko z góry)
+  const maxDistance = useMemo(() => {
     const roomMax = Math.max(dims.w, dims.h, LOFT_STAGE_DEPTH);
-    return {
-      minDistance: Math.max(1.6, roomMax * 0.45),
-      maxDistance: Math.max(14, roomMax * 3.2),
-    };
+    return Math.max(30, roomMax * 6);
   }, [dims]);
 
   return (
@@ -141,6 +117,30 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
             className="shrink-0 rounded-[var(--radius)] border border-[var(--c-border)] px-3 py-1.5 text-sm text-[var(--c-text-muted)] transition hover:border-[var(--c-primary)]"
           >
             Widok ogólny
+          </button>
+          <span className="mx-0.5 hidden h-5 w-px bg-[var(--c-border)] sm:block" />
+          <button
+            onClick={() => { setLampOn((o) => !o); if (lampOn) setLampSteer(false); }}
+            className={cn(
+              'shrink-0 rounded-[var(--radius)] border px-3 py-1.5 text-sm transition',
+              lampOn ? 'border-[var(--c-primary)] font-medium' : 'border-[var(--c-border)] text-[var(--c-text-muted)] hover:border-[var(--c-primary)]',
+            )}
+          >
+            {lampOn ? '💡 Lampa wł.' : 'Lampa wył.'}
+          </button>
+          <button
+            onClick={() => setLampSteer((s) => !s)}
+            disabled={!lampOn}
+            className={cn(
+              'shrink-0 rounded-[var(--radius)] border px-3 py-1.5 text-sm transition',
+              !lampOn
+                ? 'cursor-not-allowed border-[var(--c-border)] text-[var(--c-border)]'
+                : lampSteer
+                  ? 'border-[var(--c-primary)] font-medium'
+                  : 'border-[var(--c-border)] text-[var(--c-text-muted)] hover:border-[var(--c-primary)]',
+            )}
+          >
+            Kieruj lampą
           </button>
         </div>
         {/* Toggle ustawień pomieszczenia - tylko mobile */}
@@ -232,27 +232,28 @@ export default function LoftPreviewPage({ params }: { params: Promise<{ tenant: 
               variant={variant}
               room={{ w: dims.w, h: dims.h }}
               wallColor={wallColor ?? undefined}
+              lampOn={lampOn}
+              lampSteer={lampSteer}
+              lampAim={lampAim}
+              onLampAimChange={setLampAim}
             />
           </Suspense>
           <CameraController w={dims.w} h={dims.h} doorX={DOOR_CX} fitSignal={fitSignal} />
-          {/* Swobodna orbita/zoom/pan; kamera może wyjść przed otwarty front i
-              oddalić się. Limity kątów/dystansu chronią przed wejściem w geometrię. */}
+          {/* PEŁNA dowolność: obrót 360 (też zza drzwi), pan, zoom. Bez limitów
+              kątów i pozycji - jedynie zakres dystansu i tłumienie. */}
           <OrbitControls
             makeDefault
             enablePan
             enableZoom
+            enableRotate
             enableDamping
             dampingFactor={0.07}
-            zoomSpeed={0.75}
-            panSpeed={0.7}
-            rotateSpeed={0.55}
+            zoomSpeed={0.8}
+            panSpeed={0.8}
+            rotateSpeed={0.6}
             zoomToCursor
-            minDistance={minDistance}
+            minDistance={0.4}
             maxDistance={maxDistance}
-            minPolarAngle={Math.PI * 0.27}
-            maxPolarAngle={Math.PI * 0.51}
-            minAzimuthAngle={-Math.PI * 0.42}
-            maxAzimuthAngle={Math.PI * 0.42}
           />
         </Canvas>
       </div>
